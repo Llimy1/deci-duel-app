@@ -1,0 +1,290 @@
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  Modal,
+  Pressable,
+  TextInput,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  useWindowDimensions,
+} from 'react-native';
+import { C, FONTS, FS, S, R } from '../theme';
+import { Btn } from './ui';
+import { VizScrollWave } from './DbViz';
+import { useDiaryStore } from '../store/diaryStore';
+import { useMicDb } from '../hooks/useMicDb';
+
+interface Props {
+  visible: boolean;
+  onClose: () => void;
+  onSaved?: () => void;
+  initialDb?: number;
+}
+
+const MOODS = ['😆', '😎', '🔥', '💢', '🥺', '😤', '😭'];
+const MAX_COMMENT = 15;
+
+export default function QuickLogSheet({
+  visible, onClose, onSaved, initialDb,
+}: Props) {
+  const { width } = useWindowDimensions();
+  const [measuring, setMeasuring] = useState(false);
+  const [timer, setTimer] = useState(5);
+  const [mood, setMood] = useState('😎');
+  const [comment, setComment] = useState('');
+  const saveEntry = useDiaryStore((s) => s.saveEntry);
+  const mic = useMicDb();
+  const resultMode = initialDb !== undefined;
+
+  useEffect(() => {
+    if (!measuring) return;
+    const id = setInterval(() => {
+      setTimer((t) => {
+        const next = Math.max(0, parseFloat((t - 0.1).toFixed(1)));
+        if (next <= 0) {
+          setMeasuring(false);
+          mic.stop();
+        }
+        return next;
+      });
+    }, 120);
+    return () => clearInterval(id);
+  }, [measuring, mic.stop]);
+
+  const handleSave = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    saveEntry({ date: today, db: Math.round(initialDb ?? (mic.peak || mic.db)), mood, comment });
+    mic.reset();
+    setTimer(5);
+    setMeasuring(false);
+    setMood('😎');
+    setComment('');
+    onSaved?.();
+    onClose();
+  };
+
+  const handleMeasureToggle = async () => {
+    if (!measuring) {
+      setTimer(5);
+      mic.reset();
+      await mic.start();
+      setMeasuring(true);
+    } else {
+      await mic.stop();
+      setMeasuring(false);
+      setTimer(5);
+    }
+  };
+
+  const handleClose = () => {
+    mic.reset();
+    setMeasuring(false);
+    setTimer(5);
+    onClose();
+  };
+
+  const waveWidth = Math.min(width - S[8], 300);
+  const liveDb = initialDb ?? mic.db;
+  const displayDb = Math.round(liveDb);
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
+      <Pressable style={styles.backdrop} onPress={handleClose} />
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.sheetWrap}>
+        <View style={styles.sheet}>
+          <View style={styles.handle} />
+
+          <View style={styles.headerRow}>
+            <Text style={styles.sheetTitle}>{resultMode ? 'SAVE LOG' : 'QUICK LOG'}</Text>
+            <Pressable onPress={handleClose} style={styles.closeBtn}>
+              <Text style={styles.closeText}>×</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.vizWrap}>
+            {!resultMode && (
+              <VizScrollWave value={liveDb} width={waveWidth} height={58} cols={42} />
+            )}
+            <View style={styles.dbRow}>
+              <Text style={styles.dbValue}>{displayDb}</Text>
+              <Text style={styles.dbUnit}>dB</Text>
+            </View>
+            <Text style={styles.measureMeta}>
+              PEAK {Math.round(initialDb ?? mic.peak)} dB · {resultMode ? 'ADD MOOD' : measuring ? `${timer.toFixed(1)}s LEFT` : 'TAP TO START'}
+            </Text>
+          </View>
+
+          {!resultMode && (
+            <Btn variant={measuring ? 'ghost' : 'cyan'} size="md" full onPress={handleMeasureToggle}>
+              {measuring ? '측정 중지' : '측정 시작'}
+            </Btn>
+          )}
+
+          <Text style={styles.sectionLabel}>무드</Text>
+          <View style={styles.moodRow}>
+            {MOODS.map((m) => (
+              <Pressable
+                key={m}
+                onPress={() => setMood(m)}
+                style={[styles.moodChip, mood === m && styles.moodChipSelected]}
+              >
+                <Text style={styles.moodEmoji}>{m}</Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <Text style={styles.sectionLabel}>코멘트</Text>
+          <View style={styles.commentWrap}>
+            <TextInput
+              style={styles.commentInput}
+              value={comment}
+              onChangeText={(t) => setComment(t.slice(0, MAX_COMMENT))}
+              placeholder="오늘의 한 마디"
+              placeholderTextColor={C.textMute}
+              maxLength={MAX_COMMENT}
+            />
+            <Text style={styles.commentCounter}>{comment.length}/{MAX_COMMENT}</Text>
+          </View>
+
+          <Btn variant="yellow" size="md" full onPress={handleSave} style={{ marginTop: S[2] }}>
+            저장
+          </Btn>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  sheetWrap: {
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: '#211038',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: S[5],
+    paddingTop: S[3],
+    paddingBottom: S[5],
+    borderWidth: 1,
+    borderColor: `${C.purple}66`,
+    gap: S[2],
+  },
+  handle: {
+    width: 56,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: `${C.textDim}99`,
+    alignSelf: 'center',
+    marginBottom: S[1],
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sheetTitle: {
+    fontFamily: FONTS.headBold,
+    fontSize: FS.xl,
+    color: C.text,
+  },
+  closeBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeText: {
+    fontFamily: FONTS.body,
+    fontSize: 32,
+    lineHeight: 34,
+    color: C.textDim,
+  },
+  vizWrap: {
+    alignItems: 'center',
+    gap: S[1],
+    paddingTop: S[1],
+  },
+  dbRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 6,
+    marginTop: S[1],
+  },
+  dbValue: {
+    fontFamily: FONTS.headBold,
+    fontSize: 46,
+    lineHeight: 54,
+    color: C.textDim,
+  },
+  dbUnit: {
+    fontFamily: FONTS.mono,
+    fontSize: FS.sm,
+    color: C.textDim,
+    paddingBottom: 8,
+  },
+  measureMeta: {
+    fontFamily: FONTS.mono,
+    fontSize: FS.xs,
+    color: C.textDim,
+    letterSpacing: 1.1,
+  },
+  sectionLabel: {
+    fontFamily: FONTS.mono,
+    fontSize: FS.xs,
+    color: C.textMute,
+    letterSpacing: 1.5,
+  },
+  moodRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: S[1],
+  },
+  moodChip: {
+    width: 40,
+    height: 40,
+    borderRadius: R.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#13091f',
+    borderWidth: 1,
+    borderColor: C.line,
+  },
+  moodChipSelected: {
+    borderColor: C.pink,
+    backgroundColor: `${C.pink}22`,
+  },
+  moodEmoji: {
+    fontSize: 21,
+  },
+  commentWrap: {
+    position: 'relative',
+  },
+  commentInput: {
+    height: 52,
+    backgroundColor: '#12091d',
+    borderRadius: R.md,
+    borderWidth: 1,
+    borderColor: C.line,
+    paddingHorizontal: S[4],
+    paddingRight: 50,
+    fontFamily: FONTS.body,
+    fontSize: FS.md,
+    color: C.text,
+  },
+  commentCounter: {
+    position: 'absolute',
+    right: S[3],
+    top: '50%',
+    transform: [{ translateY: -8 }],
+    fontFamily: FONTS.mono,
+    fontSize: FS.xs,
+    color: C.textMute,
+  },
+});
