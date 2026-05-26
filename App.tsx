@@ -30,6 +30,7 @@ import ToastContainer from './src/components/ToastContainer';
 import { C } from './src/theme';
 import { getTokens, saveTokens, clearTokens } from './src/utils/secureStorage';
 import { refreshTokens } from './src/api/auth';
+import { fetchMe } from './src/api/me';
 import { Toast } from './src/utils/toast';
 
 LogBox.ignoreLogs([
@@ -55,6 +56,7 @@ export default function App() {
   const [sessionExpired, setSessionExpired] = useState(false);
   const isLoggedIn = useAppStore((s) => s.isLoggedIn);
   const restoreSession = useAppStore((s) => s.restoreSession);
+  const setMe = useAppStore((s) => s.setMe);
 
   useEffect(() => {
     async function restoreAuth() {
@@ -65,6 +67,12 @@ export default function App() {
         const result = await refreshTokens(refreshToken);
         await saveTokens(result.accessToken, result.refreshToken);
         restoreSession(result.accessToken, result.refreshToken, result.user.id, result.user.nickname);
+        try {
+          const me = await fetchMe();
+          setMe(me);
+        } catch {
+          Toast.info('프로필 정보를 불러오지 못했습니다.', 3000);
+        }
       } catch {
         await clearTokens();
         setSessionExpired(true);

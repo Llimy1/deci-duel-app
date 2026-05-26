@@ -22,7 +22,7 @@ export default function MeasureScreen({ navigation }: Props) {
   const currentMatch = useAppStore((s) => s.currentMatch);
   const nextRound = useAppStore((s) => s.nextRound);
   const clearMatch = useAppStore((s) => s.clearMatch);
-  const opponent = currentMatch?.opponent ?? { name: '상대', level: 1, bestDb: 100 };
+  const opponent = currentMatch?.opponent ?? { name: '상대', bestDb: 100 };
 
   const [timer, setTimer] = useState(ROUND_DURATION);
   const [done, setDone] = useState(false);

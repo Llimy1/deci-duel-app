@@ -26,28 +26,26 @@ export interface FindMonthlyDiaryResponse {
 export interface FindDiaryByDateResponse extends DiaryEntryResponse {}
 
 export async function createDiary(
-  entry: { peakDb: number; emoji: string; date: string; comment: string },
-  token: string
+  entry: { peakDb: number; emoji: string; date: string; comment: string }
 ) {
-  return apiPost<CreateDiaryResponse>('/diary', entry, token);
+  return apiPost<CreateDiaryResponse>('/diary', entry);
 }
 
-export async function getMonthlyDiary(year: number, month: number, token: string) {
-  return apiGet<FindMonthlyDiaryResponse>(`/diary?year=${year}&month=${month}`, token);
+export async function getMonthlyDiary(year: number, month: number) {
+  return apiGet<FindMonthlyDiaryResponse>(`/diary?year=${year}&month=${month}`);
 }
 
-export async function getDiaryByDate(date: string, token: string) {
-  return apiGet<FindDiaryByDateResponse>(`/diary/${date}`, token);
+export async function getDiaryByDate(date: string) {
+  return apiGet<FindDiaryByDateResponse>(`/diary/${date}`);
 }
 
 export async function updateDiary(
   date: string,
-  entry: { emoji: string; comment: string },
-  token: string
+  entry: { emoji: string; comment: string }
 ) {
-  return apiPatch<UpdateDiaryResponse>(`/diary/${date}`, entry, token);
+  return apiPatch<UpdateDiaryResponse>(`/diary/${date}`, entry);
 }
 
-export async function deleteDiary(date: string, token: string) {
-  return apiDelete<DeleteDiaryResponse>(`/diary/${date}`, token);
+export async function deleteDiary(date: string) {
+  return apiDelete<DeleteDiaryResponse>(`/diary/${date}`);
 }

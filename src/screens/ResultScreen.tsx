@@ -57,7 +57,7 @@ export default function ResultScreen({ navigation }: Props) {
           }]}>
             {won ? 'WIN!' : 'LOSE'}
           </Text>
-          {won && <Text style={styles.xpLabel}>⚡ +120 XP · 🏆 +1승</Text>}
+          {won && <Text style={styles.rewardLabel}>🏆 +1승</Text>}
         </Animated.View>
 
         {/* Delta */}
@@ -182,7 +182,7 @@ const styles = StyleSheet.create({
     lineHeight: 80,
     marginTop: 8,
   },
-  xpLabel: {
+  rewardLabel: {
     fontFamily: FONTS.bodyBold,
     fontSize: FS.sm,
     color: C.yellow,

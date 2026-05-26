@@ -34,7 +34,7 @@ export default function HomeScreen({ navigation }: Props) {
         {/* Header */}
         <Row style={styles.header}>
           <Row style={{ gap: S[2], flex: 1 }}>
-            <Av name={user.name} size={36} ring />
+            <Av name={user.name} size={36} color={user.avatarColor} profileImageUrl={user.profileImageUrl} ring />
             <View>
               <Text style={styles.greetSub}>안녕,</Text>
               <Text style={styles.greetName}>{user.name}</Text>
@@ -42,7 +42,6 @@ export default function HomeScreen({ navigation }: Props) {
           </Row>
           <Row style={{ gap: S[2] }}>
             <Chip color={C.yellow}>⚡ {user.streak}d</Chip>
-            <Chip color={C.cyan}>LV.{user.level}</Chip>
           </Row>
         </Row>
 
@@ -121,7 +120,7 @@ export default function HomeScreen({ navigation }: Props) {
           <Row style={{ justifyContent: 'space-between' }}>
             <View>
               <Text style={styles.challengeTitle}>120 dB 5초 유지</Text>
-              <Text style={styles.challengeSub}>보상 +250 XP · 🔥 표시</Text>
+              <Text style={styles.challengeSub}>완료하면 🔥 표시</Text>
             </View>
             <Btn variant="yellow" size="sm" onPress={() => navigation.navigate('Matching')}>도전</Btn>
           </Row>

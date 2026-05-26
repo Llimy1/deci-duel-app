@@ -39,3 +39,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# agent communication logs
+/docs/CODEX_TO_CLAUDE.md

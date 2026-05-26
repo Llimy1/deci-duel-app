@@ -31,7 +31,7 @@ export default function MatchingScreen({ navigation }: Props) {
 
   // Mock match flow: found at 2.4s, navigate to MatchFound at 4.2s
   useEffect(() => {
-    const mockOpp: Opponent = { name: '지민', level: 14, bestDb: 124 };
+    const mockOpp: Opponent = { name: '지민', bestDb: 124 };
     const t1 = setTimeout(() => {
       setOpp(mockOpp);
       setPhase('found');
@@ -68,9 +68,9 @@ export default function MatchingScreen({ navigation }: Props) {
 
         {/* You */}
         <View style={styles.avatarWrap}>
-          <Av name={user.name} size={84} ring />
+          <Av name={user.name} size={84} color={user.avatarColor} profileImageUrl={user.profileImageUrl} ring />
           <Text style={styles.playerName}>{user.name}</Text>
-          <Text style={styles.playerSub}>LV.{user.level} · {user.bestDb}dB</Text>
+          <Text style={styles.playerSub}>최고 {user.bestDb}dB</Text>
         </View>
 
         {/* VS */}
@@ -89,7 +89,7 @@ export default function MatchingScreen({ navigation }: Props) {
           }]}>
             <Av name={opp!.name} size={84} color={C.cyan} ring />
             <Text style={styles.playerName}>{opp!.name}</Text>
-            <Text style={styles.playerSub}>LV.{opp!.level} · {opp!.bestDb}dB 🇰🇷</Text>
+            <Text style={styles.playerSub}>최고 {opp!.bestDb}dB 🇰🇷</Text>
           </Animated.View>
         )}
 

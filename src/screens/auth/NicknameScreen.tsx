@@ -16,9 +16,6 @@ import { C, FONTS, FS, S, R } from '../../theme';
 import { Btn } from '../../components/ui';
 import { useAppStore } from '../../store';
 import { checkNicknameAvailability } from '../../api/user';
-import { devSignup } from '../../api/auth';
-import { saveTokens } from '../../utils/secureStorage';
-import { getErrorMessage } from '../../utils/errorHandler';
 import type { AuthStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Nickname'>;
@@ -32,13 +29,10 @@ export default function NicknameScreen({ navigation }: Props) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [nicknameAvailable, setNicknameAvailable] = useState<boolean | null>(null);
   const [checkFailed, setCheckFailed] = useState(false);
-  const [signupError, setSignupError] = useState('');
   const { height, width } = useWindowDimensions();
-  const setAuth = useAppStore((s) => s.setAuth);
-  const setTokens = useAppStore((s) => s.setTokens);
+  const setNickname = useAppStore((s) => s.setNickname);
+  const setAvatarColor = useAppStore((s) => s.setAvatarColor);
   const avatarColor = useAppStore((s) => s.avatarColor);
-  const pendingDevCredentials = useAppStore((s) => s.pendingDevCredentials);
-  const clearPendingDevCredentials = useAppStore((s) => s.clearPendingDevCredentials);
   const narrow = width < 380;
   const nickname = value.trim();
   const hasValidCharacters = nickname.length === 0 || NICKNAME_PATTERN.test(nickname);
@@ -87,25 +81,11 @@ export default function NicknameScreen({ navigation }: Props) {
   const handleContinue = async () => {
     if (!valid || isSubmitting) return;
 
-    if (pendingDevCredentials) {
-      setIsSubmitting(true);
-      setSignupError('');
-      try {
-        const result = await devSignup(pendingDevCredentials.devId, pendingDevCredentials.devPw, nickname);
-        await saveTokens(result.accessToken, result.refreshToken);
-        setTokens(result.accessToken, result.refreshToken, result.user.id);
-        setAuth(nickname, avatarColor);
-        clearPendingDevCredentials();
-        navigation.navigate('Photo');
-      } catch (e) {
-        setSignupError(getErrorMessage(e));
-      } finally {
-        setIsSubmitting(false);
-      }
-    } else {
-      setAuth(nickname, avatarColor);
-      navigation.navigate('Photo');
-    }
+    setIsSubmitting(true);
+    setNickname(nickname);
+    setAvatarColor(avatarColor);
+    navigation.navigate('Photo');
+    setIsSubmitting(false);
   };
 
   const getStatus = () => {
@@ -176,9 +156,6 @@ export default function NicknameScreen({ navigation }: Props) {
         </ScrollView>
 
         <View style={styles.ctaWrap}>
-          {signupError ? (
-            <Text style={styles.errorText}>{signupError}</Text>
-          ) : null}
           <Btn
             variant="primary"
             size="xl"

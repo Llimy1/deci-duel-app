@@ -31,6 +31,7 @@ export type RankingStackParamList = {
 
 export type ProfileStackParamList = {
   Profile: undefined;
+  Settings: undefined;
   Achievements: undefined;
   History: undefined;
   DailyChallenge: undefined;

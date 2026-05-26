@@ -37,7 +37,7 @@ export default function DailyChallengeScreen({ navigation }: Props) {
           <View style={styles.rewardRow}>
             <View style={styles.rewardBadge}>
               <Text style={styles.rewardLabel}>보상</Text>
-              <Text style={styles.rewardValue}>+250 XP</Text>
+              <Text style={styles.rewardValue}>완료 표시</Text>
             </View>
             <View style={styles.rewardBadge}>
               <Text style={styles.rewardLabel}>뱃지</Text>

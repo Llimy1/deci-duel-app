@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,28 +7,38 @@ import {
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { C, FONTS, FS, S, R } from '../../theme';
-import { Av, Card, Chip, Row } from '../../components/ui';
+import { Av, Row } from '../../components/ui';
 import { DbViz } from '../../components/DbViz';
 import { useAppStore } from '../../store';
+import { fetchMe, pickAndUploadProfileImage } from '../../api/me';
 import type { ProfileStackParamList } from '../../navigation/types';
+import { Toast } from '../../utils/toast';
+import { getErrorMessage } from '../../utils/errorHandler';
 
 type Props = NativeStackScreenProps<ProfileStackParamList, 'Profile'>;
 
 export default function ProfileScreen({ navigation }: Props) {
   const user = useAppStore((s) => s.user);
   const avatarColor = useAppStore((s) => s.avatarColor);
-  const logout = useAppStore((s) => s.logout);
+  const setMe = useAppStore((s) => s.setMe);
+  const setProfileImageUrl = useAppStore((s) => s.setProfileImageUrl);
 
-  const xpForLevel = user.level * 500;
-  const xpProgress = user.xp % xpForLevel;
-  const xpPct = xpProgress / xpForLevel;
+  useFocusEffect(
+    useCallback(() => {
+      fetchMe().then(setMe).catch(() => {});
+    }, [setMe])
+  );
+
+  const totalMatches = user.wins + user.losses;
+  const winRate = totalMatches === 0 ? 0 : Math.round((user.wins / totalMatches) * 100);
 
   const stats = [
-    { label: '승', value: '47', color: C.lime },
-    { label: '패', value: '21', color: C.pink },
-    { label: '승률', value: '69%', color: C.cyan },
+    { label: '승', value: `${user.wins}`, color: C.lime },
+    { label: '패', value: `${user.losses}`, color: C.pink },
+    { label: '승률', value: `${winRate}%`, color: C.cyan },
     { label: '연승', value: `${user.streak}`, color: C.yellow },
   ];
 
@@ -38,18 +48,25 @@ export default function ProfileScreen({ navigation }: Props) {
     { label: '히스토리', screen: 'History' as const },
   ];
 
+  const handleAvatarPress = async () => {
+    try {
+      const profileImageUrl = await pickAndUploadProfileImage();
+      if (!profileImageUrl) return;
+      setProfileImageUrl(profileImageUrl);
+      Toast.success('프로필 이미지가 변경되었습니다.');
+    } catch (e) {
+      Toast.error(getErrorMessage(e));
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
-          <Av name={user.name} size={88} color={avatarColor} ring />
+          <Pressable onPress={handleAvatarPress}>
+            <Av name={user.name} size={88} color={avatarColor} profileImageUrl={user.profileImageUrl} ring />
+          </Pressable>
           <Text style={styles.userName}>{user.name}</Text>
-          <Chip color={C.cyan}>LV.{user.level}</Chip>
-
-          <View style={styles.xpBarBg}>
-            <View style={[styles.xpBarFill, { width: `${xpPct * 100}%` as any }]} />
-          </View>
-          <Text style={styles.xpText}>{xpProgress} / {xpForLevel} XP</Text>
 
           <DbViz style="radial" value={user.bestDb} size={120} accent={C.pink} />
           <Text style={styles.bestDbLabel}>최고 {user.bestDb} dB</Text>
@@ -76,8 +93,8 @@ export default function ProfileScreen({ navigation }: Props) {
             </Pressable>
           ))}
 
-          <Pressable onPress={logout} style={({ pressed }) => [styles.linkItem, styles.logoutItem, { opacity: pressed ? 0.7 : 1 }]}>
-            <Text style={[styles.linkText, { color: C.pink }]}>로그아웃</Text>
+          <Pressable onPress={() => navigation.navigate('Settings')} style={({ pressed }) => [styles.linkItem, styles.logoutItem, { opacity: pressed ? 0.7 : 1 }]}>
+            <Text style={[styles.linkText, { color: C.pink }]}>설정</Text>
             <Text style={styles.linkArrow}>›</Text>
           </Pressable>
         </View>
@@ -106,23 +123,6 @@ const styles = StyleSheet.create({
     color: C.text,
     marginTop: S[2],
     letterSpacing: -0.5,
-  },
-  xpBarBg: {
-    width: 200,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: C.surface2,
-    overflow: 'hidden',
-  },
-  xpBarFill: {
-    height: '100%',
-    backgroundColor: C.purple,
-    borderRadius: 3,
-  },
-  xpText: {
-    fontFamily: FONTS.mono,
-    fontSize: FS.xs,
-    color: C.textMute,
   },
   bestDbLabel: {
     fontFamily: FONTS.bodyBold,

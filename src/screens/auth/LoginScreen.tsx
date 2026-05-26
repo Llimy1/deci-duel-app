@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { C, FONTS, FS, S, R } from '../../theme';
 import { useAppStore } from '../../store';
 import { devLogin } from '../../api/auth';
+import { fetchMe } from '../../api/me';
 import { saveTokens } from '../../utils/secureStorage';
 import type { AuthStackParamList } from '../../navigation/types';
 
@@ -59,6 +60,7 @@ export default function LoginScreen({ navigation }: Props) {
   const { height, width } = useWindowDimensions();
   const setAuth = useAppStore((s) => s.setAuth);
   const setTokens = useAppStore((s) => s.setTokens);
+  const setMe = useAppStore((s) => s.setMe);
   const compact = height < 740;
   const narrow = width < 380;
 
@@ -80,6 +82,7 @@ export default function LoginScreen({ navigation }: Props) {
       await saveTokens(result.accessToken, result.refreshToken);
       setTokens(result.accessToken, result.refreshToken, result.user.id);
       setAuth(result.user.nickname, C.pink);
+      fetchMe().then(setMe).catch(() => {});
     } catch (e: any) {
       setLoginError(e.message ?? '로그인에 실패했습니다');
     } finally {

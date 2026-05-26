@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  View, Text, Pressable, StyleSheet, ViewStyle, TextStyle,
+  Image, View, Text, Pressable, StyleSheet, ViewStyle, TextStyle,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { C, FONTS, R, S, FS, gradHot, gradCool } from '../theme';
@@ -173,13 +173,21 @@ interface AvProps {
   name: string;
   size?: number;
   color?: string;
+  profileImageUrl?: string | null;
   ring?: boolean;
   style?: ViewStyle;
 }
 
-export function Av({ name, size = 44, color, ring, style }: AvProps) {
-  const idx = name.charCodeAt(0) % AV_COLORS.length;
+export function Av({ name, size = 44, color, profileImageUrl, ring, style }: AvProps) {
+  const [imageFailed, setImageFailed] = React.useState(false);
+  const idx = (name.charCodeAt(0) || 0) % AV_COLORS.length;
   const bg = color ?? AV_COLORS[idx];
+  const showImage = !!profileImageUrl && !imageFailed;
+
+  React.useEffect(() => {
+    setImageFailed(false);
+  }, [profileImageUrl]);
+
   return (
     <View style={[{
       width: size,
@@ -191,13 +199,22 @@ export function Av({ name, size = 44, color, ring, style }: AvProps) {
       borderWidth: ring ? 2 : 0,
       borderColor: ring ? bg : 'transparent',
       flexShrink: 0,
+      overflow: 'hidden',
     }, style]}>
-      <Text style={{
-        fontFamily: FONTS.headBold,
-        fontSize: size * 0.42,
-        color: '#0a0612',
-        fontWeight: '800',
-      }}>{name[0].toUpperCase()}</Text>
+      {showImage ? (
+        <Image
+          source={{ uri: profileImageUrl }}
+          onError={() => setImageFailed(true)}
+          style={{ width: size, height: size, borderRadius: size / 2 }}
+        />
+      ) : (
+        <Text style={{
+          fontFamily: FONTS.headBold,
+          fontSize: size * 0.42,
+          color: '#0a0612',
+          fontWeight: '800',
+        }}>{(name[0] || 'D').toUpperCase()}</Text>
+      )}
     </View>
   );
 }

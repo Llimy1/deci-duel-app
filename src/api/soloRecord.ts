@@ -9,10 +9,10 @@ export interface FindSoloRecordResponse {
   bestDb: number;
 }
 
-export async function createSoloRecord(peakDb: number, token: string) {
-  return apiPost<CreateSoloRecordResponse>('/solo/record', { peakDb }, token);
+export async function createSoloRecord(peakDb: number) {
+  return apiPost<CreateSoloRecordResponse>('/solo/record', { peakDb });
 }
 
-export async function getSoloRecord(token: string) {
-  return apiGet<FindSoloRecordResponse>('/solo/record', token);
+export async function getSoloRecord() {
+  return apiGet<FindSoloRecordResponse>('/solo/record');
 }

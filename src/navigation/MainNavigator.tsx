@@ -22,6 +22,7 @@ import LeaderboardScreen from '../screens/social/LeaderboardScreen';
 import FriendsScreen from '../screens/social/FriendsScreen';
 
 import ProfileScreen from '../screens/profile/ProfileScreen';
+import SettingsScreen from '../screens/profile/SettingsScreen';
 import AchievementsScreen from '../screens/profile/AchievementsScreen';
 import HistoryScreen from '../screens/profile/HistoryScreen';
 import DailyChallengeScreen from '../screens/profile/DailyChallengeScreen';
@@ -75,6 +76,7 @@ function ProfileStackNav() {
   return (
     <ProfileStack.Navigator screenOptions={SCREEN_OPT}>
       <ProfileStack.Screen name="Profile" component={ProfileScreen} />
+      <ProfileStack.Screen name="Settings" component={SettingsScreen} options={{ animation: 'slide_from_right' }} />
       <ProfileStack.Screen name="Achievements" component={AchievementsScreen} options={{ animation: 'slide_from_right' }} />
       <ProfileStack.Screen name="History" component={HistoryScreen} options={{ animation: 'slide_from_right' }} />
       <ProfileStack.Screen name="DailyChallenge" component={DailyChallengeScreen} options={{ animation: 'slide_from_right' }} />

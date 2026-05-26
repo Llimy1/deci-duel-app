@@ -41,10 +41,9 @@ export default function MatchFoundScreen({ navigation }: Props) {
       <View style={styles.vsRow}>
         <View style={styles.playerWrap}>
           <Text style={styles.playerRole}>나</Text>
-          <Av name={user.name} size={80} color={avatarColor} ring />
+          <Av name={user.name} size={80} color={avatarColor} profileImageUrl={user.profileImageUrl} ring />
           <Text style={styles.playerName}>{user.name}</Text>
           <Text style={styles.playerSub}>최고 {user.bestDb}dB</Text>
-          <Text style={styles.playerSub}>LV.{user.level}</Text>
         </View>
 
         <View style={styles.vsWrap}>
@@ -56,7 +55,6 @@ export default function MatchFoundScreen({ navigation }: Props) {
           <Av name={opponent.name} size={80} color={C.cyan} ring />
           <Text style={styles.playerName}>{opponent.name}</Text>
           <Text style={styles.playerSub}>최고 {opponent.bestDb}dB</Text>
-          <Text style={styles.playerSub}>LV.{opponent.level}</Text>
         </View>
       </View>
 

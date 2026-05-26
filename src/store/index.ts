@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { Me } from '../api/me';
 
 export interface MatchResult {
   mePeak: number;
@@ -8,7 +9,6 @@ export interface MatchResult {
 
 export interface Opponent {
   name: string;
-  level: number;
   bestDb: number;
 }
 
@@ -20,11 +20,15 @@ export interface CurrentMatch {
 }
 
 interface UserState {
+  id: number | null;
   name: string;
-  level: number;
+  avatarColor: string;
+  profileImageUrl: string | null;
   streak: number;
+  wins: number;
+  losses: number;
   bestDb: number;
-  xp: number;
+  createdAt: string | null;
 }
 
 interface AppState {
@@ -46,23 +50,33 @@ interface AppState {
   setAuth: (nickname: string, color: string) => void;
   setTokens: (accessToken: string, refreshToken: string, userId: number) => void;
   restoreSession: (accessToken: string, refreshToken: string, userId: number, nickname: string) => void;
+  setMe: (me: Me) => void;
+  setNickname: (nickname: string) => void;
+  setAvatarColor: (avatarColor: string) => void;
+  setProfileImageUrl: (profileImageUrl: string | null) => void;
   setPendingDevCredentials: (devId: string, devPw: string) => void;
   clearPendingDevCredentials: () => void;
   logout: () => void;
 }
 
+const emptyUser: UserState = {
+  id: null,
+  name: '',
+  avatarColor: '#ff2d87',
+  profileImageUrl: null,
+  streak: 0,
+  wins: 0,
+  losses: 0,
+  bestDb: 0,
+  createdAt: null,
+};
+
 export const useAppStore = create<AppState>((set) => ({
-  user: {
-    name: '재민',
-    level: 7,
-    streak: 3,
-    bestDb: 118,
-    xp: 2340,
-  },
+  user: emptyUser,
   lastResult: null,
   currentMatch: null,
   isLoggedIn: false,
-  nickname: '재민',
+  nickname: '',
   avatarColor: '#ff2d87',
   accessToken: null,
   refreshToken: null,
@@ -90,19 +104,59 @@ export const useAppStore = create<AppState>((set) => ({
       isLoggedIn: true,
       nickname,
       avatarColor: color,
-      user: { ...s.user, name: nickname },
+      user: {
+        ...s.user,
+        name: nickname,
+        avatarColor: color,
+      },
     })),
   setTokens: (accessToken, refreshToken, userId) =>
     set({ accessToken, refreshToken, userId }),
   restoreSession: (accessToken, refreshToken, userId, nickname) =>
-    set({
+    set((s) => ({
       isLoggedIn: true,
       accessToken,
       refreshToken,
       userId,
       nickname,
-      user: { name: nickname, level: 1, streak: 0, bestDb: 0, xp: 0 },
+      user: {
+        ...s.user,
+        id: userId,
+        name: nickname,
+      },
+    })),
+  setMe: (me) =>
+    set({
+      isLoggedIn: true,
+      userId: me.id,
+      nickname: me.nickname,
+      avatarColor: me.avatarColor,
+      user: {
+        id: me.id,
+        name: me.nickname,
+        avatarColor: me.avatarColor,
+        profileImageUrl: me.profileImageUrl,
+        streak: me.streak,
+        wins: me.wins,
+        losses: me.losses,
+        bestDb: me.bestDb,
+        createdAt: me.createdAt,
+      },
     }),
+  setNickname: (nickname) =>
+    set((s) => ({
+      nickname,
+      user: { ...s.user, name: nickname },
+    })),
+  setAvatarColor: (avatarColor) =>
+    set((s) => ({
+      avatarColor,
+      user: { ...s.user, avatarColor },
+    })),
+  setProfileImageUrl: (profileImageUrl) =>
+    set((s) => ({
+      user: { ...s.user, profileImageUrl },
+    })),
   setPendingDevCredentials: (devId, devPw) =>
     set({ pendingDevCredentials: { devId, devPw } }),
   clearPendingDevCredentials: () =>
@@ -110,10 +164,12 @@ export const useAppStore = create<AppState>((set) => ({
   logout: () =>
     set({
       isLoggedIn: false,
-      nickname: '재민',
+      nickname: '',
       avatarColor: '#ff2d87',
       accessToken: null,
       refreshToken: null,
       userId: null,
+      user: emptyUser,
+      currentMatch: null,
     }),
 }));

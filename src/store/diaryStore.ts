@@ -43,7 +43,7 @@ export const useDiaryStore = create<DiaryState>((set, get) => ({
     const token = useAppStore.getState().accessToken;
     if (token && year && month) {
       try {
-        const response = await getMonthlyDiary(year, month, token);
+        const response = await getMonthlyDiary(year, month);
         const monthlyEntries = response.data.entries.reduce<Record<string, DiaryEntry>>((acc, entry) => {
           const diaryEntry = fromApiEntry(entry);
           acc[diaryEntry.date] = diaryEntry;
@@ -82,10 +82,10 @@ export const useDiaryStore = create<DiaryState>((set, get) => ({
     if (token) {
       try {
         if (existed) {
-          await updateDiary(entry.date, { emoji: entry.mood, comment: entry.comment }, token);
+          await updateDiary(entry.date, { emoji: entry.mood, comment: entry.comment });
           Toast.success('다이어리를 수정했어요.');
         } else {
-          await createDiary({ peakDb: entry.db, emoji: entry.mood, date: entry.date, comment: entry.comment }, token);
+          await createDiary({ peakDb: entry.db, emoji: entry.mood, date: entry.date, comment: entry.comment });
         }
       } catch (e) {
         showErrorAlert(e, '다이어리 저장 실패');
@@ -105,7 +105,7 @@ export const useDiaryStore = create<DiaryState>((set, get) => ({
     const token = useAppStore.getState().accessToken;
     if (token) {
       try {
-        await deleteDiary(date, token);
+        await deleteDiary(date);
         Toast.success('다이어리를 삭제했어요.');
       } catch (e) {
         set({ entries: prevEntries });

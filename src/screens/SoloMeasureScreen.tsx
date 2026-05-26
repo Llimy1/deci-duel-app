@@ -43,7 +43,7 @@ export default function SoloMeasureScreen({ navigation, route }: Props) {
 
   useEffect(() => {
     if (!accessToken) return;
-    getSoloRecord(accessToken)
+    getSoloRecord()
       .then((res) => {
         setSoloBest(res.data.bestDb);
         setPrevPeak(res.data.peakDb);
@@ -95,7 +95,7 @@ export default function SoloMeasureScreen({ navigation, route }: Props) {
     if (newBest) { updateBestDb(peak); setSoloBest(peak); }
     setPrevPeak(peak);
     if (accessToken) {
-      createSoloRecord(peak, accessToken).catch((e) => showErrorAlert(e, '기록 저장 실패'));
+      createSoloRecord(peak).catch((e) => showErrorAlert(e, '기록 저장 실패'));
     }
     setPhase('done');
     if (diaryMode) setDiarySheetVisible(true);
