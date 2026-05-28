@@ -2,14 +2,26 @@ import React from 'react';
 import { Text } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
 
-import type { HomeStackParamList, DiaryStackParamList, RankingStackParamList, ProfileStackParamList } from './types';
+import type {
+  RootStackParamList,
+  HomeStackParamList,
+  DiaryStackParamList,
+  RankingStackParamList,
+  ProfileStackParamList,
+  MainTabParamList,
+} from './types';
 
 import HomeScreen from '../screens/HomeScreen';
 import SoloMeasureScreen from '../screens/SoloMeasureScreen';
+import DuelLobbyScreen from '../screens/game/DuelLobbyScreen';
+import WaitingRoomScreen from '../screens/game/WaitingRoomScreen';
 import MatchingScreen from '../screens/MatchingScreen';
 import MatchFoundScreen from '../screens/game/MatchFoundScreen';
+import GameScreen from '../screens/game/GameScreen';
+import GameResultScreen from '../screens/game/GameResultScreen';
 import CountdownScreen from '../screens/CountdownScreen';
 import MeasureScreen from '../screens/MeasureScreen';
 import RoundBreakScreen from '../screens/game/RoundBreakScreen';
@@ -27,11 +39,20 @@ import AchievementsScreen from '../screens/profile/AchievementsScreen';
 import HistoryScreen from '../screens/profile/HistoryScreen';
 import DailyChallengeScreen from '../screens/profile/DailyChallengeScreen';
 
+const DEFAULT_TAB_STYLE = {
+  backgroundColor: C.bgElev,
+  borderTopColor: C.line,
+  borderTopWidth: 1,
+  paddingTop: 4,
+  height: 60,
+};
+
 const HomeStack = createNativeStackNavigator<HomeStackParamList>();
 const DiaryStack = createNativeStackNavigator<DiaryStackParamList>();
 const RankingStack = createNativeStackNavigator<RankingStackParamList>();
 const ProfileStack = createNativeStackNavigator<ProfileStackParamList>();
-const Tab = createBottomTabNavigator();
+const RootStack = createNativeStackNavigator<RootStackParamList>();
+const Tab = createBottomTabNavigator<MainTabParamList>();
 
 const SCREEN_OPT = {
   headerShown: false,
@@ -43,8 +64,6 @@ function HomeStackNav() {
     <HomeStack.Navigator screenOptions={{ ...SCREEN_OPT, animation: 'fade_from_bottom' }}>
       <HomeStack.Screen name="Home" component={HomeScreen} />
       <HomeStack.Screen name="SoloMeasure" component={SoloMeasureScreen} options={{ animation: 'slide_from_bottom' }} />
-      <HomeStack.Screen name="Matching" component={MatchingScreen} options={{ animation: 'slide_from_bottom' }} />
-      <HomeStack.Screen name="MatchFound" component={MatchFoundScreen} options={{ animation: 'fade' }} />
       <HomeStack.Screen name="Countdown" component={CountdownScreen} options={{ animation: 'fade' }} />
       <HomeStack.Screen name="Measure" component={MeasureScreen} options={{ animation: 'fade' }} />
       <HomeStack.Screen name="RoundBreak" component={RoundBreakScreen} options={{ animation: 'fade' }} />
@@ -84,24 +103,24 @@ function ProfileStackNav() {
   );
 }
 
-export default function MainNavigator() {
+function MainTabs() {
+  const { bottom } = useSafeAreaInsets();
+
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: C.bgElev,
-          borderTopColor: C.line,
-          borderTopWidth: 1,
-          paddingTop: 4,
-          height: 60,
+          ...DEFAULT_TAB_STYLE,
+          height: bottom > 0 ? 72 : 60,
+          paddingBottom: bottom > 0 ? 8 : 4,
         },
         tabBarActiveTintColor: C.pink,
         tabBarInactiveTintColor: C.textMute,
         tabBarLabelStyle: {
           fontSize: 10,
           fontFamily: 'JetBrainsMono_400Regular',
-          marginBottom: 4,
+          marginBottom: 0,
         },
       }}
     >
@@ -144,5 +163,19 @@ export default function MainNavigator() {
         }}
       />
     </Tab.Navigator>
+  );
+}
+
+export default function MainNavigator() {
+  return (
+    <RootStack.Navigator screenOptions={SCREEN_OPT}>
+      <RootStack.Screen name="MainTabs" component={MainTabs} />
+      <RootStack.Screen name="DuelLobby" component={DuelLobbyScreen} options={{ animation: 'slide_from_right' }} />
+      <RootStack.Screen name="WaitingRoom" component={WaitingRoomScreen} options={{ animation: 'slide_from_right' }} />
+      <RootStack.Screen name="Matching" component={MatchingScreen} options={{ animation: 'slide_from_bottom' }} />
+      <RootStack.Screen name="MatchFound" component={MatchFoundScreen} options={{ animation: 'fade' }} />
+      <RootStack.Screen name="Game" component={GameScreen} options={{ animation: 'fade' }} />
+      <RootStack.Screen name="GameResult" component={GameResultScreen} options={{ animation: 'slide_from_bottom' }} />
+    </RootStack.Navigator>
   );
 }

@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, Pressable, Animated, StyleSheet, useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { VizScrollWave } from '../components/DbViz';
 import { Btn, Chip } from '../components/ui';
@@ -53,6 +54,24 @@ export default function SoloMeasureScreen({ navigation, route }: Props) {
   const resultAnim = useRef(new Animated.Value(0)).current;
   const timerAnim = useRef(new Animated.Value(1)).current;
   const diaryMode = route.params?.diaryMode === true;
+
+  // phase를 ref로 동기화 — useFocusEffect cleanup에서 최신값 읽기 위해
+  const phaseRef = useRef<Phase>('ready');
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
+
+  // 화면 이탈 시 측정 중단 처리
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        if (phaseRef.current === 'measuring') {
+          mic.reset();
+          setTimer(MEASURE_DURATION);
+          timerAnim.setValue(1);
+          setPhase('ready');
+        }
+      };
+    }, [mic.reset, timerAnim])
+  );
 
   // 카운트다운
   useEffect(() => {
@@ -202,7 +221,7 @@ export default function SoloMeasureScreen({ navigation, route }: Props) {
             },
           ]}
         >
-          <Text style={styles.newBestToastText}>신기록! {peakResult.toFixed(1)} dB</Text>
+          <Text style={styles.newBestToastText}>신기록! {peakResult.toFixed(2)} dB</Text>
         </Animated.View>
       )}
 
@@ -244,8 +263,8 @@ export default function SoloMeasureScreen({ navigation, route }: Props) {
           )}
           {phase === 'measuring' && (
             <>
-              <Text style={[styles.dbNumber, compact && styles.dbNumberCompact, { color: dbColor, textShadowColor: dbColor, textShadowRadius: 16, textShadowOffset: { width: 0, height: 0 } }]}>
-                {liveDb.toFixed(1)}
+              <Text style={[styles.dbNumber, compact && styles.dbNumberCompact, { color: dbColor }]}>
+                {liveDb.toFixed(2)}
               </Text>
               <Text style={styles.dbUnit}>dB</Text>
             </>
@@ -258,11 +277,8 @@ export default function SoloMeasureScreen({ navigation, route }: Props) {
               <View style={styles.resultNumberRow}>
                 <Text style={[styles.dbNumber, compact && styles.dbNumberCompact, {
                   color: isNewBest ? C.yellow : C.pink,
-                  textShadowColor: isNewBest ? C.yellow : C.pink,
-                  textShadowRadius: 20,
-                  textShadowOffset: { width: 0, height: 0 },
                 }]}>
-                  {peakResult.toFixed(1)}
+                  {peakResult.toFixed(2)}
                 </Text>
                 <Text style={styles.resultUnit}>dB</Text>
               </View>
@@ -273,9 +289,9 @@ export default function SoloMeasureScreen({ navigation, route }: Props) {
 
       {/* Stats */}
       <View style={[styles.statsRow, compact && styles.statsRowCompact]}>
-        <StatBox label="솔로 최고" value={soloBest > 0 ? soloBest.toFixed(1) : '—'} unit="dB" color={C.yellow} />
-        <StatBox label="최대" value={phase !== 'ready' ? mic.peak.toFixed(1) : '—'} unit="dB" color={C.pink} />
-        <StatBox label="이전" value={prevPeak > 0 ? prevPeak.toFixed(1) : '—'} unit="dB" color={C.cyan} />
+        <StatBox label="솔로 최고" value={soloBest > 0 ? soloBest.toFixed(2) : '—'} unit="dB" color={C.yellow} />
+        <StatBox label="최대" value={phase !== 'ready' ? mic.peak.toFixed(2) : '—'} unit="dB" color={C.pink} />
+        <StatBox label="이전" value={prevPeak > 0 ? prevPeak.toFixed(2) : '—'} unit="dB" color={C.cyan} />
       </View>
 
       {/* Timer bar */}
@@ -438,21 +454,27 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: S[5],
     paddingVertical: S[3],
   },
-  backBtn: { padding: S[2] },
+  backBtn: {
+    width: 68,
+    height: 44,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+  },
   backText: { fontSize: 20, color: C.textDim },
   title: {
-    fontFamily: FONTS.bodyBold,
+    flex: 1,
+    fontFamily: FONTS.monoBold,
     fontSize: FS.sm,
     color: C.textDim,
     letterSpacing: 0,
+    textAlign: 'center',
   },
   statusChip: {
-    minWidth: 68,
-    justifyContent: 'center',
+    width: 68,
+    justifyContent: 'flex-end',
   },
   vizSection: {
     flex: 1,
@@ -476,7 +498,7 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   timerNum: {
-    fontFamily: FONTS.headBold,
+    fontFamily: FONTS.display,
     fontSize: 34,
     lineHeight: 46,
   },
@@ -500,7 +522,7 @@ const styles = StyleSheet.create({
     minHeight: 112,
   },
   dbNumber: {
-    fontFamily: FONTS.headBold,
+    fontFamily: FONTS.display,
     fontSize: 62,
     lineHeight: 88,
     paddingTop: 6,
@@ -558,12 +580,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   statLabel: {
-    fontFamily: FONTS.bodySemibold,
+    fontFamily: FONTS.monoBold,
     fontSize: FS.xs,
     letterSpacing: 0,
     marginBottom: 4,
   },
-  statValue: { fontFamily: FONTS.headBold, fontSize: FS.lg },
+  statValue: { fontFamily: FONTS.display, fontSize: FS.lg },
   statUnit: { fontFamily: FONTS.mono, fontSize: 10, color: C.textDim },
   timerBarWrap: {
     paddingHorizontal: S[5],

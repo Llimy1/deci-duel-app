@@ -198,7 +198,6 @@ export default function SettingsScreen({ navigation }: Props) {
             />
             <View style={{ flex: 1 }}>
               <Text style={styles.previewName}>{nicknameDraft || '닉네임'}</Text>
-              <Text style={styles.previewSub}>이미지 URL은 화면 진입 시 새로 갱신됩니다.</Text>
             </View>
           </View>
 
@@ -224,7 +223,7 @@ export default function SettingsScreen({ navigation }: Props) {
             </Row>
           </View>
 
-          <View style={styles.fieldBlock}>
+          <View style={[styles.fieldBlock, { borderBottomWidth: 0 }]}>
             <Row style={{ justifyContent: 'space-between' }}>
               <Text style={styles.fieldLabel}>아바타 색상</Text>
               <Pressable onPress={handleAvatarSave}>
@@ -245,9 +244,6 @@ export default function SettingsScreen({ navigation }: Props) {
               ))}
             </Row>
           </View>
-
-          <SettingsRow label="로그아웃" tone="danger" onPress={handleLogout} />
-          <SettingsRow label="회원 탈퇴" tone="danger" onPress={() => setDeleteModalVisible(true)} isLast />
         </Section>
 
         <Section title="앱 설정">
@@ -270,6 +266,11 @@ export default function SettingsScreen({ navigation }: Props) {
             }}
             isLast
           />
+        </Section>
+
+        <Section title="계정 관리">
+          <SettingsRow label="로그아웃" tone="danger" onPress={handleLogout} />
+          <SettingsRow label="회원 탈퇴" tone="danger" onPress={() => setDeleteModalVisible(true)} isLast />
         </Section>
       </ScrollView>
 
@@ -356,15 +357,18 @@ function ToggleRow({
   isLast?: boolean;
 }) {
   return (
-    <View style={[styles.rowItem, isLast && styles.lastRow]}>
+    <View style={[styles.toggleRow, isLast && styles.lastRow]}>
       <Text style={styles.rowLabel}>{label}</Text>
-      <Switch
-        value={value}
-        onValueChange={onValueChange}
-        trackColor={{ false: C.surface2, true: `${C.pink}88` }}
-        thumbColor={value ? C.pink : C.textMute}
-        ios_backgroundColor={C.surface2}
-      />
+      <View style={styles.switchSlot}>
+        <Switch
+          value={value}
+          onValueChange={onValueChange}
+          trackColor={{ false: C.surface2, true: `${C.pink}88` }}
+          thumbColor={value ? C.pink : C.textMute}
+          ios_backgroundColor={C.surface2}
+          style={styles.switchControl}
+        />
+      </View>
     </View>
   );
 }
@@ -444,12 +448,6 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.headBold,
     fontSize: FS.lg,
     color: C.text,
-  },
-  previewSub: {
-    marginTop: 4,
-    fontFamily: FONTS.body,
-    fontSize: FS.xs,
-    color: C.textMute,
   },
   fieldBlock: {
     padding: S[4],
@@ -531,6 +529,25 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.mono,
     fontSize: FS.sm,
     color: C.textDim,
+  },
+  toggleRow: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingLeft: S[4],
+    paddingRight: S[3],
+    borderBottomWidth: 1,
+    borderBottomColor: C.line,
+  },
+  switchSlot: {
+    width: 52,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  switchControl: {
+    transform: [{ scaleX: 0.86 }, { scaleY: 0.86 }],
   },
   chevron: {
     fontFamily: FONTS.headBold,

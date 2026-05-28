@@ -11,7 +11,6 @@ import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { C, FONTS, FS, S, R } from '../../theme';
 import { Av, Row } from '../../components/ui';
-import { DbViz } from '../../components/DbViz';
 import { useAppStore } from '../../store';
 import { fetchMe, pickAndUploadProfileImage } from '../../api/me';
 import type { ProfileStackParamList } from '../../navigation/types';
@@ -68,8 +67,6 @@ export default function ProfileScreen({ navigation }: Props) {
           </Pressable>
           <Text style={styles.userName}>{user.name}</Text>
 
-          <DbViz style="radial" value={user.bestDb} size={120} accent={C.pink} />
-          <Text style={styles.bestDbLabel}>최고 {user.bestDb} dB</Text>
         </View>
 
         <Row style={styles.statsRow}>
@@ -123,12 +120,6 @@ const styles = StyleSheet.create({
     color: C.text,
     marginTop: S[2],
     letterSpacing: -0.5,
-  },
-  bestDbLabel: {
-    fontFamily: FONTS.bodyBold,
-    fontSize: FS.xs,
-    color: C.pink,
-    letterSpacing: 0,
   },
   statsRow: {
     marginHorizontal: S[5],

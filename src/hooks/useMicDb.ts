@@ -31,36 +31,55 @@ export function useMicDb(): MicDbState {
   }, []);
 
   const start = useCallback(async () => {
-    if (!hasPermission) {
-      const { granted } = await Audio.requestPermissionsAsync();
-      setHasPermission(granted);
-      if (!granted) return;
+    // 기존 interval 먼저 정리
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    // 기존 녹음 인스턴스가 살아있으면 먼저 종료 (_recorderExists 해제)
+    if (recordingRef.current) {
+      try { await recordingRef.current.stopAndUnloadAsync(); } catch {}
+      recordingRef.current = null;
     }
 
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-    });
+    // 권한 확인
+    let permitted = hasPermission;
+    if (!permitted) {
+      const { granted } = await Audio.requestPermissionsAsync();
+      setHasPermission(granted);
+      permitted = granted;
+    }
+    if (!permitted) return;
 
-    const recording = new Audio.Recording();
-    await recording.prepareToRecordAsync({
-      ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
-      isMeteringEnabled: true,
-    });
-    await recording.startAsync();
-    recordingRef.current = recording;
-    setIsRecording(true);
+    try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
 
-    intervalRef.current = setInterval(async () => {
-      const status = await recording.getStatusAsync();
-      if (status.isRecording && status.metering !== undefined) {
-        // metering is dBFS (negative). Convert to positive SPL approximation.
-        const raw = status.metering + CALIBRATION_OFFSET;
-        const clamped = Math.max(0, Math.min(140, raw));
-        setDb(clamped);
-        setPeak((prev) => Math.max(prev, clamped));
-      }
-    }, 60);
+      const recording = new Audio.Recording();
+      await recording.prepareToRecordAsync({
+        ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+        isMeteringEnabled: true,
+      });
+      await recording.startAsync();
+      recordingRef.current = recording;
+      setIsRecording(true);
+
+      intervalRef.current = setInterval(async () => {
+        if (!recordingRef.current) return;
+        const status = await recordingRef.current.getStatusAsync();
+        if (status.isRecording && status.metering !== undefined) {
+          // metering is dBFS (negative). Convert to positive SPL approximation.
+          const raw = status.metering + CALIBRATION_OFFSET;
+          const clamped = Math.max(0, Math.min(140, raw));
+          setDb(clamped);
+          setPeak((prev) => Math.max(prev, clamped));
+        }
+      }, 60);
+    } catch (err) {
+      console.warn('[useMicDb] start failed:', err);
+    }
   }, [hasPermission]);
 
   const stop = useCallback(async () => {

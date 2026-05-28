@@ -7,6 +7,7 @@ import { StageBg, Av, Row } from '../components/ui';
 import { C, FONTS, FS, S, gradHot } from '../theme';
 import { useAppStore } from '../store';
 import type { Opponent } from '../store';
+import { MOCK_OPPONENT } from '../types/game';
 import type { RootStackParamList } from '../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Matching'>;
@@ -41,7 +42,7 @@ export default function MatchingScreen({ navigation }: Props) {
     }, 2400);
     const t2 = setTimeout(() => {
       startMatch(mockOpp);
-      navigation.replace('MatchFound');
+      navigation.replace('MatchFound', { opponent: MOCK_OPPONENT });
     }, 4200);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, []);

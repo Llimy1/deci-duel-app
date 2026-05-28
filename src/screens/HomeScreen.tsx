@@ -56,8 +56,8 @@ export default function HomeScreen({ navigation }: Props) {
           <Row style={{ justifyContent: 'space-between', marginBottom: 10 }}>
             <View>
               <Text style={styles.bestLabel}>최고 기록</Text>
-              <Row style={{ alignItems: 'flex-end', gap: 4 }}>
-                <Text style={styles.bestDb}>{user.bestDb}</Text>
+              <Row style={{ alignItems: 'flex-end', gap: S[2] }}>
+                <Text style={styles.bestDb}>{user.bestDb.toFixed(2)}</Text>
                 <Text style={styles.bestUnit}>dB</Text>
               </Row>
             </View>
@@ -70,7 +70,7 @@ export default function HomeScreen({ navigation }: Props) {
 
         {/* DUEL NOW CTA */}
         <Pressable
-          onPress={() => navigation.navigate('Matching')}
+          onPress={() => navigation.navigate('DuelLobby')}
           style={({ pressed }) => [styles.duelCard, { opacity: pressed ? 0.88 : 1 }]}
         >
           <LinearGradient
@@ -86,27 +86,21 @@ export default function HomeScreen({ navigation }: Props) {
           </View>
           <View>
             <Text style={styles.duelMode}>1 · ON · 1</Text>
-            <Text style={styles.duelTitle}>지금 대결</Text>
-            <Text style={styles.duelSub}>지금 12,847명 대기 중</Text>
+            <Text style={styles.duelTitle}>대결 로비</Text>
+            <Text style={styles.duelSub}>랜덤 매칭과 친구 대결</Text>
           </View>
           <Text style={styles.duelArrow}>→</Text>
         </Pressable>
 
-        {/* Secondary grid */}
-        <Row style={{ gap: 10, marginHorizontal: S[5] }}>
-          <SecondaryCard
-            title="방 코드"
-            sub="친구와 비밀방"
-            color={C.cyan}
-            onPress={() => {}}
-          />
+        {/* Secondary action */}
+        <View style={{ marginHorizontal: S[5] }}>
           <SecondaryCard
             title="솔로 측정"
             sub="내 데시벨 측정"
             color={C.yellow}
             onPress={() => navigation.navigate('SoloMeasure')}
           />
-        </Row>
+        </View>
 
         {/* Daily Challenge */}
         <Card style={{ ...styles.challengeCard, backgroundColor: 'rgba(255,255,255,0.03)' }} padding={14}>
@@ -139,15 +133,16 @@ function SecondaryCard({ title, sub, color, onPress }: {
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [{
-        flex: 1, height: 80, borderRadius: 16, padding: 14,
+        flex: 1, height: 100, borderRadius: 16, padding: 18,
         backgroundColor: `${color}18`,
-        borderWidth: 1, borderColor: `${color}44`,
+        borderWidth: 1, borderColor: `${color}66`,
+        justifyContent: 'center',
         opacity: pressed ? 0.8 : 1,
       }]}
     >
-      <Text style={{ fontFamily: FONTS.bodyBold, fontSize: FS.xs, color }}>{title}</Text>
-      <Text style={{ fontSize: FS.sm, color: C.text, marginTop: 4, opacity: 0.85, fontFamily: FONTS.body }}>{sub}</Text>
-      <Text style={{ position: 'absolute', right: 10, bottom: 8, color, fontSize: 18, opacity: 0.5 }}>→</Text>
+      <Text style={{ fontFamily: FONTS.headBold, fontSize: FS.xl, color, lineHeight: 28 }}>{title}</Text>
+      <Text style={{ fontFamily: FONTS.bodySemibold, fontSize: FS.md, color: C.textDim, marginTop: 4 }}>{sub}</Text>
+      <Text style={{ position: 'absolute', right: 16, top: '50%', marginTop: -10, color, fontSize: 22 }}>→</Text>
     </Pressable>
   );
 }
@@ -193,22 +188,23 @@ const styles = StyleSheet.create({
     marginHorizontal: S[5],
   },
   bestLabel: {
-    fontFamily: FONTS.bodySemibold,
+    fontFamily: FONTS.monoBold,
     fontSize: FS.xs,
     color: C.textDim,
-    letterSpacing: 0,
+    letterSpacing: 0.5,
+    marginBottom: 4,
   },
   bestDb: {
     fontFamily: FONTS.display,
     fontSize: 36,
-    lineHeight: 40,
+    lineHeight: 46,
     color: C.yellow,
   },
   bestUnit: {
-    fontFamily: FONTS.mono,
+    fontFamily: FONTS.monoBold,
     fontSize: FS.sm,
     color: C.textDim,
-    paddingBottom: 4,
+    paddingBottom: 7,
   },
   progressBg: {
     height: 4,
@@ -230,7 +226,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     justifyContent: 'space-between',
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
   },
   duelMode: {
     fontFamily: FONTS.mono,
