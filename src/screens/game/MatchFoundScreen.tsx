@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Av, Btn, Row, StageBg } from '../../components/ui';
@@ -20,13 +20,22 @@ export default function MatchFoundScreen({ navigation, route }: Props) {
   const gameStatus = useGameStore((s) => s.status);
   const countdown = useGameStore((s) => s.countdown);
   const finalResult = useGameStore((s) => s.finalResult);
+  const opponentReady = useGameStore((s) => s.opponentReady);
   const sendReady = useGameStore((s) => s.sendReady);
-  const disconnectSocket = useGameStore((s) => s.disconnectSocket);
+  const leaveRoom = useGameStore((s) => s.leaveRoom);
+  const goToWaitingRoom = useGameStore((s) => s.goToWaitingRoom);
+  const clearGoToWaitingRoom = useGameStore((s) => s.clearGoToWaitingRoom);
+  const disconnectedWaitSecs = useGameStore((s) => s.disconnectedWaitSecs);
+  const errorMessage = useGameStore((s) => s.errorMessage);
   const routeOpponent = route.params?.opponent;
   const storeRoomCode = useGameStore((s) => s.roomCode);
   const roomCode = route.params?.roomCode ?? storeRoomCode ?? undefined;
   const hasNavigatedToGame = useRef(false);
   const hasHandledFinalResult = useRef(false);
+  // 마운트 시점의 finalResult 저장 — stale 값이 즉시 GameResult navigate를 유발하는 것 방지
+  const mountedFinalResult = useRef(finalResult);
+  // 프로그래매틱 이탈(Game/WaitingRoom/GameResult 이동) 여부 추적
+  const hasNavigatedAway = useRef(false);
   const opponent = useMemo<OpponentInfo>(() => {
     if (routeOpponent) return routeOpponent;
     if (storeOpponent) return storeOpponent;
@@ -43,23 +52,37 @@ export default function MatchFoundScreen({ navigation, route }: Props) {
   }, [currentMatch?.opponent, routeOpponent, storeOpponent]);
 
   const [meReady, setMeReady] = useState(false);
+  const [disconnectCountdown, setDisconnectCountdown] = useState<number | null>(null);
+  const disconnectWasPositiveRef = useRef(false);
 
   useEffect(() => {
     if (gameStatus !== 'playing' || hasNavigatedToGame.current) return;
     hasNavigatedToGame.current = true;
+    hasNavigatedAway.current = true;
     startMatch({ name: opponent.nickname, bestDb: opponent.bestDb });
     navigation.replace('Game', { roomCode, opponent });
   }, [gameStatus, navigation, opponent, roomCode, startMatch]);
 
   useEffect(() => {
+    if (!goToWaitingRoom || !roomCode) return;
+    clearGoToWaitingRoom();
+    hasNavigatedAway.current = true;
+    navigation.replace('WaitingRoom', { roomCode });
+  }, [goToWaitingRoom, clearGoToWaitingRoom, navigation, roomCode]);
+
+  useEffect(() => {
     if (!finalResult || hasHandledFinalResult.current) return;
+    // 마운트 시점에 이미 있던 finalResult는 무시 — 이전 게임의 stale 값
+    if (mountedFinalResult.current === finalResult) return;
     hasHandledFinalResult.current = true;
 
     if (finalResult.forfeit && finalResult.rounds.length === 0) {
-      navigation.replace('DuelLobby');
+      hasNavigatedAway.current = true;
+      navigation.goBack();
       return;
     }
 
+    hasNavigatedAway.current = true;
     navigation.replace('GameResult', {
       result: finalResult.result,
       myScore: finalResult.myScore,
@@ -69,10 +92,45 @@ export default function MatchFoundScreen({ navigation, route }: Props) {
     });
   }, [finalResult, navigation]);
 
+  // 서버 에러 발생 시 meReady 롤백 (sendReady emit 후 error 이벤트 수신 시)
+  useEffect(() => {
+    if (!errorMessage || !meReady) return;
+    setMeReady(false);
+  }, [errorMessage, meReady]);
+
+  // 상대방 연결 끊김 카운트다운
+  useEffect(() => {
+    if (disconnectedWaitSecs === null) {
+      setDisconnectCountdown(null);
+      disconnectWasPositiveRef.current = false;
+      return;
+    }
+    disconnectWasPositiveRef.current = disconnectedWaitSecs > 0;
+    setDisconnectCountdown(disconnectedWaitSecs);
+    const id = setInterval(() => {
+      setDisconnectCountdown((c) => (c !== null && c > 0 ? c - 1 : c));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [disconnectedWaitSecs]);
+
+  // 안드로이드 하드웨어 백 버튼 대응 — 프로그래매틱 이탈이 아닌 경우에만 leaveRoom 호출
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', () => {
+      if (!hasNavigatedAway.current) {
+        leaveRoom();
+      }
+    });
+    return unsubscribe;
+  }, [navigation, leaveRoom]);
+
   const statusMessage = countdown !== null
     ? '곧 시작합니다'
+    : meReady && opponentReady
+        ? '곧 카운트다운이 시작됩니다'
     : meReady
         ? '상대방 준비 중...'
+        : opponentReady
+          ? '상대방이 준비됐어요'
         : '서로 준비 완료를 기다려요';
 
   const handleLeave = () => {
@@ -82,21 +140,34 @@ export default function MatchFoundScreen({ navigation, route }: Props) {
         text: '나가기',
         style: 'destructive',
         onPress: () => {
-          disconnectSocket();
-          navigation.popToTop();
+          hasNavigatedAway.current = true;
+          leaveRoom();
+          navigation.goBack();
         },
       },
     ]);
   };
 
   const handleReady = () => {
-    setMeReady(true);
-    sendReady();
+    const ok = sendReady();
+    if (ok) setMeReady(true);
   };
 
   return (
     <StageBg>
       <SafeAreaView style={styles.safe}>
+        {disconnectCountdown !== null && (
+          <View style={styles.disconnectBanner}>
+            <Text style={styles.disconnectIcon}>📡</Text>
+            <Text style={styles.disconnectText}>
+              {disconnectCountdown > 0
+                ? `상대방 연결 끊김 · ${disconnectCountdown}초 대기 중...`
+                : disconnectWasPositiveRef.current
+                  ? '상대방 연결 끊김 · 게임 종료 중...'
+                  : '상대방 연결 끊김'}
+            </Text>
+          </View>
+        )}
         <Row style={styles.topBar}>
           <Pressable onPress={handleLeave} style={styles.closeBtn}>
             <Text style={styles.closeText}>✕</Text>
@@ -107,12 +178,12 @@ export default function MatchFoundScreen({ navigation, route }: Props) {
 
         <View style={[styles.playerPanel, styles.oppPanel]}>
           <PlayerCard
-            label="OPPONENT"
+            label="상대"
             name={opponent.nickname}
             bestDb={opponent.bestDb}
             avatarColor={opponent.avatarColor}
             profileImageUrl={opponent.profileImageUrl}
-            ready={countdown !== null || gameStatus === 'playing'}
+            ready={opponentReady || countdown !== null || gameStatus === 'playing'}
             accent={C.cyan}
           />
         </View>
@@ -131,7 +202,7 @@ export default function MatchFoundScreen({ navigation, route }: Props) {
 
         <View style={[styles.playerPanel, styles.mePanel]}>
           <PlayerCard
-            label="YOU"
+            label="나"
             name={user.name || '나'}
             bestDb={user.bestDb}
             avatarColor={user.avatarColor}
@@ -299,5 +370,25 @@ const styles = StyleSheet.create({
   bottom: {
     paddingHorizontal: S[5],
     paddingBottom: S[6],
+  },
+  disconnectBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: S[2],
+    paddingVertical: S[2],
+    paddingHorizontal: S[4],
+    backgroundColor: `${C.yellow}22`,
+    borderBottomWidth: 1,
+    borderBottomColor: `${C.yellow}44`,
+  },
+  disconnectIcon: {
+    fontSize: 14,
+  },
+  disconnectText: {
+    fontFamily: FONTS.monoBold,
+    fontSize: FS.xs,
+    color: C.yellow,
+    letterSpacing: 0.3,
   },
 });

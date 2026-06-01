@@ -22,9 +22,11 @@ import {
 } from '@expo-google-fonts/jetbrains-mono';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppStore } from './src/store';
 import AuthNavigator from './src/navigation/AuthNavigator';
 import MainNavigator from './src/navigation/MainNavigator';
+import { ONBOARDING_KEY } from './src/screens/auth/OnboardingScreen';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import ToastContainer from './src/components/ToastContainer';
 import { C } from './src/theme';
@@ -54,6 +56,7 @@ export default function App() {
 
   const [sessionRestored, setSessionRestored] = useState(false);
   const [sessionExpired, setSessionExpired] = useState(false);
+  const [hasOnboarded, setHasOnboarded] = useState(false);
   const isLoggedIn = useAppStore((s) => s.isLoggedIn);
   const restoreSession = useAppStore((s) => s.restoreSession);
   const setMe = useAppStore((s) => s.setMe);
@@ -61,6 +64,10 @@ export default function App() {
   useEffect(() => {
     async function restoreAuth() {
       try {
+        // 온보딩 완료 여부 확인
+        const onboarded = await AsyncStorage.getItem(ONBOARDING_KEY);
+        setHasOnboarded(onboarded === 'true');
+
         const { refreshToken } = await getTokens();
         if (!refreshToken) return;
 
@@ -104,7 +111,10 @@ export default function App() {
       <SafeAreaProvider>
         <View style={{ flex: 1 }}>
           <NavigationContainer>
-            {isLoggedIn ? <MainNavigator /> : <AuthNavigator />}
+            {isLoggedIn
+              ? <MainNavigator />
+              : <AuthNavigator initialRouteName={hasOnboarded ? 'Login' : 'Onboarding'} />
+            }
           </NavigationContainer>
           <StatusBar style="light" />
           <ToastContainer />

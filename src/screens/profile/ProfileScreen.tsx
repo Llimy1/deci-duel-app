@@ -10,7 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { C, FONTS, FS, S, R } from '../../theme';
-import { Av, Row } from '../../components/ui';
+import { Av } from '../../components/ui';
 import { useAppStore } from '../../store';
 import { fetchMe, pickAndUploadProfileImage } from '../../api/me';
 import type { ProfileStackParamList } from '../../navigation/types';
@@ -30,16 +30,6 @@ export default function ProfileScreen({ navigation }: Props) {
       fetchMe().then(setMe).catch(() => {});
     }, [setMe])
   );
-
-  const totalMatches = user.wins + user.losses;
-  const winRate = totalMatches === 0 ? 0 : Math.round((user.wins / totalMatches) * 100);
-
-  const stats = [
-    { label: '승', value: `${user.wins}`, color: C.lime },
-    { label: '패', value: `${user.losses}`, color: C.pink },
-    { label: '승률', value: `${winRate}%`, color: C.cyan },
-    { label: '연승', value: `${user.streak}`, color: C.yellow },
-  ];
 
   const links = [
     { label: '업적', screen: 'Achievements' as const },
@@ -66,17 +56,8 @@ export default function ProfileScreen({ navigation }: Props) {
             <Av name={user.name} size={88} color={avatarColor} profileImageUrl={user.profileImageUrl} ring />
           </Pressable>
           <Text style={styles.userName}>{user.name}</Text>
-
+          <Text style={styles.bestDb}>{user.bestDb > 0 ? `${user.bestDb.toFixed(2)} dB` : '기록 없음'}</Text>
         </View>
-
-        <Row style={styles.statsRow}>
-          {stats.map((s) => (
-            <View key={s.label} style={styles.statItem}>
-              <Text style={[styles.statValue, { color: s.color }]}>{s.value}</Text>
-              <Text style={styles.statLabel}>{s.label}</Text>
-            </View>
-          ))}
-        </Row>
 
         <View style={styles.linkList}>
           {links.map((l) => (
@@ -121,28 +102,11 @@ const styles = StyleSheet.create({
     marginTop: S[2],
     letterSpacing: -0.5,
   },
-  statsRow: {
-    marginHorizontal: S[5],
-    backgroundColor: C.surface,
-    borderRadius: R.lg,
-    borderWidth: 1,
-    borderColor: C.line,
-    padding: S[4],
-    justifyContent: 'space-around',
-  },
-  statItem: {
-    alignItems: 'center',
-    gap: S[1],
-  },
-  statValue: {
-    fontFamily: FONTS.display,
-    fontSize: FS.xl,
-  },
-  statLabel: {
-    fontFamily: FONTS.bodySemibold,
-    fontSize: FS.xs,
-    color: C.textMute,
-    letterSpacing: 0,
+  bestDb: {
+    fontFamily: FONTS.mono,
+    fontSize: FS.sm,
+    color: C.textDim,
+    marginTop: S[1],
   },
   linkList: {
     marginHorizontal: S[5],

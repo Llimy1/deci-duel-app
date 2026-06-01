@@ -15,6 +15,7 @@ import { Btn } from './ui';
 import { VizScrollWave } from './DbViz';
 import { useDiaryStore } from '../store/diaryStore';
 import { useMicDb } from '../hooks/useMicDb';
+import { Toast } from '../utils/toast';
 
 interface Props {
   visible: boolean;
@@ -69,7 +70,11 @@ export default function QuickLogSheet({
     if (!measuring) {
       setTimer(5);
       mic.reset();
-      await mic.start();
+      const started = await mic.start();
+      if (!started) {
+        Toast.error('마이크를 시작할 수 없습니다.');
+        return;
+      }
       setMeasuring(true);
     } else {
       await mic.stop();

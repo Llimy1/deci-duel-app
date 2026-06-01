@@ -18,20 +18,14 @@ import HomeScreen from '../screens/HomeScreen';
 import SoloMeasureScreen from '../screens/SoloMeasureScreen';
 import DuelLobbyScreen from '../screens/game/DuelLobbyScreen';
 import WaitingRoomScreen from '../screens/game/WaitingRoomScreen';
-import MatchingScreen from '../screens/MatchingScreen';
 import MatchFoundScreen from '../screens/game/MatchFoundScreen';
 import GameScreen from '../screens/game/GameScreen';
 import GameResultScreen from '../screens/game/GameResultScreen';
-import CountdownScreen from '../screens/CountdownScreen';
-import MeasureScreen from '../screens/MeasureScreen';
-import RoundBreakScreen from '../screens/game/RoundBreakScreen';
-import ResultScreen from '../screens/ResultScreen';
 
 import CalendarScreen from '../screens/diary/CalendarScreen';
 import DayDetailScreen from '../screens/diary/DayDetailScreen';
 
 import LeaderboardScreen from '../screens/social/LeaderboardScreen';
-import FriendsScreen from '../screens/social/FriendsScreen';
 
 import ProfileScreen from '../screens/profile/ProfileScreen';
 import SettingsScreen from '../screens/profile/SettingsScreen';
@@ -64,10 +58,6 @@ function HomeStackNav() {
     <HomeStack.Navigator screenOptions={{ ...SCREEN_OPT, animation: 'fade_from_bottom' }}>
       <HomeStack.Screen name="Home" component={HomeScreen} />
       <HomeStack.Screen name="SoloMeasure" component={SoloMeasureScreen} options={{ animation: 'slide_from_bottom' }} />
-      <HomeStack.Screen name="Countdown" component={CountdownScreen} options={{ animation: 'fade' }} />
-      <HomeStack.Screen name="Measure" component={MeasureScreen} options={{ animation: 'fade' }} />
-      <HomeStack.Screen name="RoundBreak" component={RoundBreakScreen} options={{ animation: 'fade' }} />
-      <HomeStack.Screen name="Result" component={ResultScreen} options={{ animation: 'slide_from_bottom' }} />
     </HomeStack.Navigator>
   );
 }
@@ -86,7 +76,6 @@ function RankingStackNav() {
   return (
     <RankingStack.Navigator screenOptions={SCREEN_OPT}>
       <RankingStack.Screen name="Leaderboard" component={LeaderboardScreen} />
-      <RankingStack.Screen name="Friends" component={FriendsScreen} options={{ animation: 'slide_from_right' }} />
     </RankingStack.Navigator>
   );
 }
@@ -158,7 +147,7 @@ function MainTabs() {
         name="ProfileTab"
         component={ProfileStackNav}
         options={{
-          tabBarLabel: '나',
+          tabBarLabel: '프로필',
           tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>👤</Text>,
         }}
       />
@@ -172,7 +161,6 @@ export default function MainNavigator() {
       <RootStack.Screen name="MainTabs" component={MainTabs} />
       <RootStack.Screen name="DuelLobby" component={DuelLobbyScreen} options={{ animation: 'slide_from_right' }} />
       <RootStack.Screen name="WaitingRoom" component={WaitingRoomScreen} options={{ animation: 'slide_from_right' }} />
-      <RootStack.Screen name="Matching" component={MatchingScreen} options={{ animation: 'slide_from_bottom' }} />
       <RootStack.Screen name="MatchFound" component={MatchFoundScreen} options={{ animation: 'fade' }} />
       <RootStack.Screen name="Game" component={GameScreen} options={{ animation: 'fade' }} />
       <RootStack.Screen name="GameResult" component={GameResultScreen} options={{ animation: 'slide_from_bottom' }} />

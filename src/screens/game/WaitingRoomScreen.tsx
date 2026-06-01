@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,35 +18,64 @@ export default function WaitingRoomScreen({ navigation, route }: Props) {
   const gameStatus = useGameStore((s) => s.status);
   const opponent = useGameStore((s) => s.opponent);
   const finalResult = useGameStore((s) => s.finalResult);
-  const disconnectSocket = useGameStore((s) => s.disconnectSocket);
+  const leaveRoom = useGameStore((s) => s.leaveRoom);
+  const goToWaitingRoom = useGameStore((s) => s.goToWaitingRoom);
+  const clearGoToWaitingRoom = useGameStore((s) => s.clearGoToWaitingRoom);
   const roomCode = storeRoomCode ?? routeRoomCode;
   const [elapsed, setElapsed] = useState(0);
+  // 프로그래매틱 이탈 여부 추적 — MatchFound로 replace 시 leaveRoom 호출 방지
+  const hasNavigatedAway = useRef(false);
 
   useEffect(() => {
     const timer = setInterval(() => setElapsed((t) => t + 1), 1000);
     return () => clearInterval(timer);
   }, []);
 
+  // 이미 WaitingRoom에 있을 때 goToWaitingRoom 신호 소비 — navigate 없이 플래그만 초기화
+  useEffect(() => {
+    if (!goToWaitingRoom) return;
+    clearGoToWaitingRoom();
+    setElapsed(0);
+  }, [goToWaitingRoom, clearGoToWaitingRoom]);
+
   useEffect(() => {
     if (gameStatus !== 'matched' || !opponent) return;
+    hasNavigatedAway.current = true;
     navigation.replace('MatchFound', { roomCode, opponent });
   }, [gameStatus, navigation, opponent, roomCode]);
 
   useEffect(() => {
     if (!finalResult?.forfeit) return;
-    navigation.replace('DuelLobby');
+    hasNavigatedAway.current = true;
+    navigation.goBack();
   }, [finalResult, navigation]);
+
+  // 안드로이드 하드웨어 백 버튼 / iOS 스와이프 백 대응
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', () => {
+      if (!hasNavigatedAway.current) {
+        leaveRoom();
+      }
+    });
+    return unsubscribe;
+  }, [navigation, leaveRoom]);
 
   const copyRoomCode = async () => {
     await Clipboard.setStringAsync(roomCode);
     Toast.success('방 코드가 복사되었습니다.');
   };
 
+  const handleCancel = () => {
+    hasNavigatedAway.current = true;
+    leaveRoom();
+    navigation.goBack();
+  };
+
   return (
     <StageBg>
       <SafeAreaView style={styles.safe}>
         <Row style={styles.topBar}>
-          <Pressable onPress={() => navigation.goBack()} style={styles.closeBtn}>
+          <Pressable onPress={handleCancel} style={styles.closeBtn}>
             <Text style={styles.closeText}>✕</Text>
           </Pressable>
           <View style={styles.topCopy}>
@@ -81,10 +110,7 @@ export default function WaitingRoomScreen({ navigation, route }: Props) {
             variant="ghost"
             size="lg"
             full
-            onPress={() => {
-              disconnectSocket();
-              navigation.goBack();
-            }}
+            onPress={handleCancel}
           >
             취소
           </Btn>

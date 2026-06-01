@@ -43,3 +43,6 @@ yarn-error.*
 
 # agent communication logs
 /docs/CODEX_TO_CLAUDE.md
+local.properties
+local.properties
+.env

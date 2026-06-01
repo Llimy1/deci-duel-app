@@ -5,7 +5,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { StageBg, Card, Chip, Av, Btn, Row } from '../components/ui';
+import { StageBg, Card, Av, Row } from '../components/ui';
 import { DbViz } from '../components/DbViz';
 import { C, FONTS, FS, R, S, gradHot } from '../theme';
 import { useAppStore } from '../store';
@@ -40,9 +40,7 @@ export default function HomeScreen({ navigation }: Props) {
               <Text style={styles.greetName}>{user.name}</Text>
             </View>
           </Row>
-          <Row style={{ gap: S[2] }}>
-            <Chip color={C.yellow}>⚡ {user.streak}d</Chip>
-          </Row>
+          <View />
         </Row>
 
         {/* Wordmark */}
@@ -55,7 +53,7 @@ export default function HomeScreen({ navigation }: Props) {
         <Card accent={C.pink} style={styles.bestCard} padding={14}>
           <Row style={{ justifyContent: 'space-between', marginBottom: 10 }}>
             <View>
-              <Text style={styles.bestLabel}>최고 기록</Text>
+              <Text style={styles.bestLabel}>솔로 최고 기록</Text>
               <Row style={{ alignItems: 'flex-end', gap: S[2] }}>
                 <Text style={styles.bestDb}>{user.bestDb.toFixed(2)}</Text>
                 <Text style={styles.bestUnit}>dB</Text>
@@ -101,24 +99,6 @@ export default function HomeScreen({ navigation }: Props) {
             onPress={() => navigation.navigate('SoloMeasure')}
           />
         </View>
-
-        {/* Daily Challenge */}
-        <Card style={{ ...styles.challengeCard, backgroundColor: 'rgba(255,255,255,0.03)' }} padding={14}>
-          <Row style={{ justifyContent: 'space-between', marginBottom: 10 }}>
-            <Row style={{ gap: S[1] }}>
-              <Text style={{ color: C.yellow }}>⚡</Text>
-              <Text style={[styles.challengeLabel, { color: C.yellow }]}>데일리 챌린지</Text>
-            </Row>
-            <Text style={[styles.challengeLabel, { color: C.textDim }]}>14:32:08</Text>
-          </Row>
-          <Row style={{ justifyContent: 'space-between' }}>
-            <View>
-              <Text style={styles.challengeTitle}>120 dB 5초 유지</Text>
-              <Text style={styles.challengeSub}>완료하면 🔥 표시</Text>
-            </View>
-            <Btn variant="yellow" size="sm" onPress={() => navigation.navigate('Matching')}>도전</Btn>
-          </Row>
-        </Card>
 
         <View style={{ height: S[4] }} />
       </ScrollView>
@@ -251,24 +231,5 @@ const styles = StyleSheet.create({
   duelArrow: {
     fontSize: 24,
     color: C.text,
-  },
-  challengeCard: {
-    marginHorizontal: S[5],
-  },
-  challengeLabel: {
-    fontFamily: FONTS.bodySemibold,
-    fontSize: FS.xs,
-    letterSpacing: 0,
-  },
-  challengeTitle: {
-    fontFamily: FONTS.headBold,
-    fontSize: FS.sm,
-    color: C.text,
-  },
-  challengeSub: {
-    fontFamily: FONTS.body,
-    fontSize: FS.xs,
-    color: C.textDim,
-    marginTop: 2,
   },
 });

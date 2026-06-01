@@ -9,9 +9,23 @@ import {
   Platform,
   KeyboardAvoidingView,
   useWindowDimensions,
+  Alert,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { FontAwesome5 } from '@expo/vector-icons';
+import Svg, { Path } from 'react-native-svg';
+
+function GoogleIcon() {
+  return (
+    <Svg width={20} height={20} viewBox="0 0 533.5 544.3">
+      <Path d="M533.5 278.4c0-18.5-1.5-37.1-4.7-55.3H272.1v104.8h147c-6.1 33.8-25.7 63.7-54.4 82.7v68h87.7c51.5-47.4 81.1-117.4 81.1-200.2z" fill="#4285F4" />
+      <Path d="M272.1 544.3c73.4 0 135.3-24.1 180.4-65.7l-87.7-68c-24.4 16.6-55.9 26-92.6 26-71 0-131.2-47.9-152.8-112.3H28.9v70.1c46.2 91.9 140.3 149.9 243.2 149.9z" fill="#34A853" />
+      <Path d="M119.3 324.3c-11.4-33.8-11.4-70.4 0-104.2V150H28.9c-38.6 76.9-38.6 167.5 0 244.4l90.4-70.1z" fill="#FBBC04" />
+      <Path d="M272.1 107.7c38.8-.6 76.3 14 104.4 40.8l77.7-77.7C405 24.6 339.7-.8 272.1 0 169.2 0 75.1 58 28.9 150l90.4 70.1c21.5-64.5 81.8-112.4 152.8-112.4z" fill="#EA4335" />
+    </Svg>
+  );
+}
 import { C, FONTS, FS, S, R } from '../../theme';
 import { useAppStore } from '../../store';
 import { devLogin } from '../../api/auth';
@@ -70,7 +84,11 @@ export default function LoginScreen({ navigation }: Props) {
   }, []);
 
   const handleSocial = () => {
-    navigation.navigate('Nickname');
+    Alert.alert(
+      '준비 중',
+      '소셜 로그인은 준비 중입니다.\n개발자 로그인을 이용해 주세요.',
+      [{ text: '확인' }]
+    );
   };
 
   const handleDevLogin = async () => {
@@ -99,16 +117,19 @@ export default function LoginScreen({ navigation }: Props) {
     bg,
     textColor,
     onPress,
+    icon,
   }: {
     label: string;
     bg: string;
     textColor: string;
     onPress: () => void;
+    icon?: React.ReactNode;
   }) => (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [styles.socialBtn, { backgroundColor: bg, opacity: pressed ? 0.85 : 1 }]}
     >
+      {icon && <View style={styles.socialBtnIcon}>{icon}</View>}
       <Text style={[styles.socialBtnText, { color: textColor }]}>{label}</Text>
     </Pressable>
   );
@@ -137,14 +158,18 @@ export default function LoginScreen({ navigation }: Props) {
 
             <View style={styles.socialStack}>
               {isIOS && (
-                <SocialBtn label="Apple로 계속하기" bg="#000" textColor="#fff" onPress={handleSocial} />
+                <SocialBtn label="Apple로 계속하기" bg="#000" textColor="#fff" onPress={handleSocial}
+                  icon={<FontAwesome5 name="apple" size={20} color="#fff" />} />
               )}
-              <SocialBtn label="카카오로 계속하기" bg="#FEE500" textColor="#191600" onPress={handleSocial} />
+              <SocialBtn label="카카오로 계속하기" bg="#FEE500" textColor="#191600" onPress={handleSocial}
+                icon={<FontAwesome5 name="comment" size={19} color="#191600" solid />} />
               {!isIOS && (
-                <SocialBtn label="Google로 계속하기" bg="#fff" textColor="#202124" onPress={handleSocial} />
+                <SocialBtn label="Google로 계속하기" bg="#fff" textColor="#202124" onPress={handleSocial}
+                  icon={<GoogleIcon />} />
               )}
               {isIOS && (
-                <SocialBtn label="Google로 계속하기" bg="#fff" textColor="#202124" onPress={handleSocial} />
+                <SocialBtn label="Google로 계속하기" bg="#fff" textColor="#202124" onPress={handleSocial}
+                  icon={<GoogleIcon />} />
               )}
             </View>
 
@@ -267,6 +292,12 @@ const styles = StyleSheet.create({
   socialBtn: {
     height: 54,
     borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  socialBtnIcon: {
+    position: 'absolute',
+    left: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -6,8 +6,18 @@ interface AuthTokenData {
   user: { id: number; nickname: string };
 }
 
-export async function devSignup(id: string, password: string, nickname: string): Promise<AuthTokenData> {
-  const response = await apiPost<AuthTokenData>('/auth/dev/signup', { id, password, nickname }, { skipAuth: true });
+export async function devSignup(
+  id: string,
+  password: string,
+  nickname: string,
+  termsVersion: string,
+  privacyVersion: string,
+): Promise<AuthTokenData> {
+  const response = await apiPost<AuthTokenData>(
+    '/auth/dev/signup',
+    { id, password, nickname, termsVersion, privacyVersion },
+    { skipAuth: true },
+  );
   return response.data;
 }
 

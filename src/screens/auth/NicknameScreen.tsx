@@ -84,7 +84,7 @@ export default function NicknameScreen({ navigation }: Props) {
     setIsSubmitting(true);
     setNickname(nickname);
     setAvatarColor(avatarColor);
-    navigation.navigate('Photo');
+    navigation.navigate('Terms');
     setIsSubmitting(false);
   };
 

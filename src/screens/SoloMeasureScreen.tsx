@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, Pressable, Animated, StyleSheet, useWindowDimensions,
+  View, Text, Pressable, Animated, StyleSheet, useWindowDimensions, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -13,6 +13,7 @@ import { useMicDb } from '../hooks/useMicDb';
 import { useAppStore } from '../store';
 import { createSoloRecord, getSoloRecord } from '../api/soloRecord';
 import { showErrorAlert } from '../utils/errorHandler';
+import { requireMicPermission } from '../utils/micPermission';
 import type { DiaryStackParamList, HomeStackParamList } from '../navigation/types';
 
 const MEASURE_DURATION = 5.0;
@@ -64,13 +65,14 @@ export default function SoloMeasureScreen({ navigation, route }: Props) {
     useCallback(() => {
       return () => {
         if (phaseRef.current === 'measuring') {
+          void mic.stop(); // reset()에서 stop()을 제거했으므로 명시적으로 호출
           mic.reset();
           setTimer(MEASURE_DURATION);
           timerAnim.setValue(1);
           setPhase('ready');
         }
       };
-    }, [mic.reset, timerAnim])
+    }, [mic.stop, mic.reset, timerAnim])
   );
 
   // 카운트다운
@@ -133,10 +135,16 @@ export default function SoloMeasureScreen({ navigation, route }: Props) {
     }).start();
   }, [timer]);
 
-  const handleStart = () => {
+  const handleStart = async () => {
+    const ok = await requireMicPermission();
+    if (!ok) return;
     setDiarySheetVisible(false);
     setDiarySavedToastVisible(false);
-    mic.start();
+    const started = await mic.start();
+    if (!started) {
+      Alert.alert('마이크 오류', '마이크를 시작할 수 없습니다.\n권한을 확인해주세요.');
+      return;
+    }
     setTimer(MEASURE_DURATION);
     setPhase('measuring');
   };

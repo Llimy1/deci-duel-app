@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Dimensions, StyleSheet, Text, View } from 'react-native';
+import { Alert, Animated, Dimensions, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -36,7 +36,12 @@ export default function GameScreen({ navigation, route }: Props) {
   const storeOppScore = useGameStore((s) => s.oppScore);
   const storeRoundResult = useGameStore((s) => s.roundResult);
   const finalResult = useGameStore((s) => s.finalResult);
+  const opponentDb = useGameStore((s) => s.opponentDb);
+  const opponentPeakDb = useGameStore((s) => s.opponentPeakDb);
+  const sendRoundDb = useGameStore((s) => s.sendRoundDb);
   const submitRound = useGameStore((s) => s.submitRound);
+  const leaveRoom = useGameStore((s) => s.leaveRoom);
+  const disconnectedWaitSecs = useGameStore((s) => s.disconnectedWaitSecs);
   const routeOpponent = route.params?.opponent;
   const opponent = useMemo<OpponentInfo>(() => routeOpponent ?? storeOpponent ?? MOCK_OPPONENT, [routeOpponent, storeOpponent]);
 
@@ -47,16 +52,21 @@ export default function GameScreen({ navigation, route }: Props) {
       : { type: 'countdown', n: countdown ?? 3 }
   );
   const [resultNextIn, setResultNextIn] = useState(2);
+  const [disconnectCountdown, setDisconnectCountdown] = useState<number | null>(null);
+  const disconnectWasPositiveRef = useRef(false);
   const pulse = useRef(new Animated.Value(1)).current;
   const finalNavigationKey = useRef<string | null>(null);
+  const lastDbEmitAt = useRef(0);
+  const emitWindowPeak = useRef(0); // 마지막 전송 이후 윈도우 내 peak
 
   const round = storeRound;
   const myScore = storeMyScore;
   const oppScore = storeOppScore;
   const isGolden = round === TOTAL_ROUNDS && myScore === oppScore;
   const myLiveDb = phase.type === 'measuring' ? mic.db : phase.type === 'roundResult' ? phase.record.myDb : 0;
-  const oppLiveDb = phase.type === 'roundResult' ? phase.record.oppDb : 0;
-  const oppPeak = phase.type === 'roundResult' ? phase.record.oppDb : 0;
+  const oppLiveDb = phase.type === 'measuring' ? opponentDb : phase.type === 'roundResult' ? phase.record.oppDb : 0;
+  const oppPeak = phase.type === 'measuring' ? opponentPeakDb : phase.type === 'roundResult' ? phase.record.oppDb : 0;
+  const inLastSeconds = phase.type === 'measuring' && phase.timeLeft <= 1.5;
 
   useEffect(() => {
     if (gameStatus === 'countdown' && countdown !== null) {
@@ -69,6 +79,11 @@ export default function GameScreen({ navigation, route }: Props) {
       return;
     }
 
+    if (gameStatus === 'gameOver') {
+      setPhase({ type: 'gameOver' });
+      return;
+    }
+
     if (gameStatus === 'roundResult' && storeRoundResult) {
       setResultNextIn(2);
       setPhase({ type: 'roundResult', nextIn: 2, record: storeRoundResult });
@@ -78,34 +93,74 @@ export default function GameScreen({ navigation, route }: Props) {
   useEffect(() => {
     if (phase.type !== 'measuring') return;
     mic.reset();
-    mic.start();
+    lastDbEmitAt.current = 0;
+    emitWindowPeak.current = 0;
+    let submitted = false;
+    let mounted = true;
+    let timerId: ReturnType<typeof setInterval> | null = null;
+
+    // mic 시작 성공 후 타이머 시작 — 실제 녹음 시작 시점부터 라운드 시간 계산
+    mic.start().then((started) => {
+      if (!mounted) return;
+      if (!started) {
+        Alert.alert(
+          '마이크 오류',
+          '마이크를 시작할 수 없습니다.\n게임을 나가주세요.',
+          [
+            {
+              text: '나가기',
+              style: 'destructive',
+              onPress: () => { leaveRoom(); navigation.goBack(); },
+            },
+          ]
+        );
+        return;
+      }
+
+      const startedAt = Date.now();
+      timerId = setInterval(() => {
+        const elapsed = (Date.now() - startedAt) / 1000;
+        const timeLeft = Math.max(0, Number((ROUND_SECONDS - elapsed).toFixed(1)));
+        setPhase((p) => p.type === 'measuring' ? { type: 'measuring', timeLeft } : p);
+
+        if (timeLeft > 0 || submitted) return;
+        submitted = true;
+        clearInterval(timerId!);
+        void mic.stop();
+        const peakDb = Number(Math.max(mic.getPeak(), mic.getDb()).toFixed(2));
+        submitRound(round, peakDb);
+      }, 100);
+    });
+
     return () => {
-      mic.stop();
+      mounted = false;
+      if (timerId) clearInterval(timerId);
+      if (!submitted) void mic.stop();
     };
-  }, [round, phase.type]);
+  }, [mic.getDb, mic.getPeak, mic.reset, mic.start, mic.stop, phase.type, round, submitRound, leaveRoom, navigation]);
 
   useEffect(() => {
     if (phase.type !== 'measuring') return;
-    if (phase.timeLeft <= 0) {
-      mic.stop();
-      submitRound(round, Number(mic.peak.toFixed(2)));
-      return;
-    }
-    const timer = setTimeout(() => {
-      setPhase((p) => p.type === 'measuring'
-        ? { type: 'measuring', timeLeft: Number((p.timeLeft - 0.1).toFixed(1)) }
-        : p);
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [mic.peak, mic.stop, phase, round, submitRound]);
+    // 매 tick마다 이 윈도우의 peak 갱신 (전송 여부와 무관)
+    emitWindowPeak.current = Math.max(emitWindowPeak.current, mic.db);
+
+    const now = Date.now();
+    if (now - lastDbEmitAt.current < 150) return; // 250ms → 150ms, peak 손실 구간 축소
+    lastDbEmitAt.current = now;
+
+    // 현재값 대신 윈도우 내 peak를 전송 — 상대방이 실제 최고점을 볼 수 있음
+    const peakToSend = emitWindowPeak.current;
+    emitWindowPeak.current = 0;
+    sendRoundDb(round, Number(peakToSend.toFixed(2)));
+  }, [mic.db, phase.type, round, sendRoundDb]);
 
   useEffect(() => {
-    if (phase.type !== 'roundResult') return;
+    if (phase.type !== 'roundResult' || resultNextIn <= 0) return;
     const timer = setTimeout(() => {
       setResultNextIn((value) => Math.max(0, value - 1));
     }, 1000);
     return () => clearTimeout(timer);
-  }, [phase]);
+  }, [phase.type, resultNextIn]);
 
   useEffect(() => {
     if (!finalResult) return;
@@ -121,8 +176,23 @@ export default function GameScreen({ navigation, route }: Props) {
     });
   }, [finalResult, navigation]);
 
+  // 상대방 연결 끊김 카운트다운
   useEffect(() => {
-    if (phase.type !== 'measuring' || phase.timeLeft > 1.5) return;
+    if (disconnectedWaitSecs === null) {
+      setDisconnectCountdown(null);
+      disconnectWasPositiveRef.current = false;
+      return;
+    }
+    disconnectWasPositiveRef.current = disconnectedWaitSecs > 0;
+    setDisconnectCountdown(disconnectedWaitSecs);
+    const id = setInterval(() => {
+      setDisconnectCountdown((c) => (c !== null && c > 0 ? c - 1 : c));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [disconnectedWaitSecs]);
+
+  useEffect(() => {
+    if (!inLastSeconds) return;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulse, { toValue: 1.04, duration: 180, useNativeDriver: true }),
@@ -131,11 +201,23 @@ export default function GameScreen({ navigation, route }: Props) {
     );
     loop.start();
     return () => loop.stop();
-  }, [phase, pulse]);
+  }, [inLastSeconds, pulse]);
 
   return (
     <StageBg>
       <View style={[styles.root, { paddingTop: top + S[3] }]}>
+        {disconnectCountdown !== null && (
+          <View style={styles.disconnectBanner}>
+            <Text style={styles.disconnectIcon}>📡</Text>
+            <Text style={styles.disconnectText}>
+              {disconnectCountdown > 0
+                ? `상대방 연결 끊김 · ${disconnectCountdown}초 대기 중...`
+                : disconnectWasPositiveRef.current
+                  ? '상대방 연결 끊김 · 게임 종료 중...'
+                  : '상대방 연결 끊김'}
+            </Text>
+          </View>
+        )}
         <GameHeader round={round} myScore={myScore} oppScore={oppScore} isGolden={isGolden} total={TOTAL_ROUNDS} />
         {phase.type === 'countdown' && <CountdownPhase n={phase.n} isGolden={isGolden} />}
         {phase.type === 'measuring' && (
@@ -347,6 +429,29 @@ function ResultBar({
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+  },
+  disconnectBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: S[2],
+    paddingVertical: S[2],
+    paddingHorizontal: S[4],
+    marginHorizontal: S[5],
+    marginBottom: S[2],
+    borderRadius: R.sm,
+    backgroundColor: `${C.yellow}22`,
+    borderWidth: 1,
+    borderColor: `${C.yellow}44`,
+  },
+  disconnectIcon: {
+    fontSize: 13,
+  },
+  disconnectText: {
+    fontFamily: FONTS.monoBold,
+    fontSize: FS.xs,
+    color: C.yellow,
+    letterSpacing: 0.3,
   },
   countdownWrap: {
     flex: 1,

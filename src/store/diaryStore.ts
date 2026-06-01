@@ -88,7 +88,9 @@ export const useDiaryStore = create<DiaryState>((set, get) => ({
           await createDiary({ peakDb: entry.db, emoji: entry.mood, date: entry.date, comment: entry.comment });
         }
       } catch (e) {
+        set({ entries: prevEntries }); // 낙관적 업데이트 롤백
         showErrorAlert(e, '다이어리 저장 실패');
+        return; // AsyncStorage에 실패한 상태 저장 방지
       }
     }
 

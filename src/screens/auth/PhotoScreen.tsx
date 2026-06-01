@@ -15,7 +15,6 @@ import { Av } from '../../components/ui';
 import { useAppStore } from '../../store';
 import { devSignup } from '../../api/auth';
 import {
-  fetchMe,
   generateAndUploadRandomProfileImage,
   pickProfileImageAsset,
   ProfileImageAsset,
@@ -28,13 +27,12 @@ import type { AuthStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Photo'>;
 
-export default function PhotoScreen({ navigation }: Props) {
+export default function PhotoScreen({ navigation, route }: Props) {
+  const { termsVersion, privacyVersion } = route.params;
   const nickname = useAppStore((s) => s.nickname);
   const avatarColor = useAppStore((s) => s.avatarColor);
   const accessToken = useAppStore((s) => s.accessToken);
-  const setAuth = useAppStore((s) => s.setAuth);
   const setTokens = useAppStore((s) => s.setTokens);
-  const setMe = useAppStore((s) => s.setMe);
   const setProfileImageUrl = useAppStore((s) => s.setProfileImageUrl);
   const pendingDevCredentials = useAppStore((s) => s.pendingDevCredentials);
   const clearPendingDevCredentials = useAppStore((s) => s.clearPendingDevCredentials);
@@ -47,22 +45,21 @@ export default function PhotoScreen({ navigation }: Props) {
   const ensureAccountSession = async () => {
     if (!pendingDevCredentials) return;
 
-    const result = await devSignup(pendingDevCredentials.devId, pendingDevCredentials.devPw, nickname);
+    const result = await devSignup(
+      pendingDevCredentials.devId,
+      pendingDevCredentials.devPw,
+      nickname,
+      termsVersion,
+      privacyVersion,
+    );
     await saveTokens(result.accessToken, result.refreshToken);
     setTokens(result.accessToken, result.refreshToken, result.user.id);
   };
 
   const finishOnboarding = async (profileImageUrl?: string) => {
     if (profileImageUrl) setProfileImageUrl(profileImageUrl);
-
-    if (accessToken || pendingDevCredentials) {
-      const me = await fetchMe();
-      setMe(me);
-      clearPendingDevCredentials();
-      return;
-    }
-
-    setAuth(nickname, avatarColor);
+    clearPendingDevCredentials();
+    navigation.navigate('MicTest');
   };
 
   const handlePickImage = async () => {
@@ -118,7 +115,7 @@ export default function PhotoScreen({ navigation }: Props) {
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Text style={styles.backText}>‹</Text>
         </Pressable>
-        <Text style={styles.step}>02 / 04</Text>
+        <Text style={styles.step}>03 / 04</Text>
       </View>
 
       <ScrollView

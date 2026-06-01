@@ -19,6 +19,7 @@ import type { GameStackParamList } from '../../navigation/types';
 import { useAppStore } from '../../store';
 import { useGameStore } from '../../store/gameStore';
 import { Toast } from '../../utils/toast';
+import { requireMicPermission } from '../../utils/micPermission';
 
 type Props = NativeStackScreenProps<GameStackParamList, 'DuelLobby'>;
 type SheetMode = 'choice' | 'code';
@@ -38,32 +39,43 @@ export default function DuelLobbyScreen({ navigation }: Props) {
   const [code, setCode] = useState('');
   const slide = useRef(new Animated.Value(0)).current;
   const lastNavigationKey = useRef<string | null>(null);
+  // navigation.isFocused() 대신 ref로 포커스 추적 — Modal이 열려있을 때도 정확함
+  const isFocusedRef = useRef(true);
 
   useFocusEffect(
     useCallback(() => {
+      isFocusedRef.current = true;
+      // 포커스 복귀 시 이전 navigate key 초기화 — 같은 roomCode로 재입장 시 navigate 차단 방지
+      lastNavigationKey.current = null;
       if (!accessToken) {
         Toast.error('로그인이 필요합니다.');
         navigation.goBack();
         return;
       }
       connectSocket(accessToken);
+      return () => {
+        isFocusedRef.current = false;
+      };
     }, [accessToken, connectSocket, navigation])
   );
 
   useEffect(() => {
     if (!roomCode) return;
+    if (!isFocusedRef.current) return;
     const key = `${gameStatus}:${roomCode}`;
     if (lastNavigationKey.current === key) return;
 
     if (gameStatus === 'waiting') {
       lastNavigationKey.current = key;
       setSheetOpen(false);
+      setCode('');
       navigation.navigate('WaitingRoom', { roomCode });
     }
 
     if (gameStatus === 'matched') {
       lastNavigationKey.current = key;
       setSheetOpen(false);
+      setCode('');
       navigation.navigate('MatchFound', { roomCode });
     }
   }, [gameStatus, navigation, roomCode]);
@@ -87,13 +99,17 @@ export default function DuelLobbyScreen({ navigation }: Props) {
     });
   };
 
-  const createRoom = () => {
+  const createRoom = async () => {
+    const ok = await requireMicPermission();
+    if (!ok) return;
     closeSheet();
     createSocketRoom();
   };
 
-  const joinRoom = () => {
+  const joinRoom = async () => {
     if (code.length !== 6) return;
+    const ok = await requireMicPermission();
+    if (!ok) return;
     clearError();
     joinSocketRoom(code);
   };

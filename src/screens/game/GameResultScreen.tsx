@@ -1,10 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { CommonActions } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Btn, Row, StageBg } from '../../components/ui';
-import { C, FONTS, FS, R, S } from '../../theme';
+import { C, FONTS, FS, S } from '../../theme';
 import type { GameStackParamList } from '../../navigation/types';
 import { useGameStore } from '../../store/gameStore';
 import { useAppStore } from '../../store';
@@ -15,8 +14,19 @@ type Props = NativeStackScreenProps<GameStackParamList, 'GameResult'>;
 export default function GameResultScreen({ navigation, route }: Props) {
   const { top } = useSafeAreaInsets();
   const { result, myScore, oppScore, rounds, forfeit } = route.params;
-  const disconnectSocket = useGameStore((s) => s.disconnectSocket);
+  const leaveRoom = useGameStore((s) => s.leaveRoom);
+  const requestRematch = useGameStore((s) => s.requestRematch);
+  const rematchMatchedAt = useGameStore((s) => s.rematchMatchedAt);
+  const gameStatus = useGameStore((s) => s.status);
+  const roomCode = useGameStore((s) => s.roomCode);
+  const opponent = useGameStore((s) => s.opponent);
+  const goToWaitingRoom = useGameStore((s) => s.goToWaitingRoom);
+  const clearGoToWaitingRoom = useGameStore((s) => s.clearGoToWaitingRoom);
   const setMe = useAppStore((s) => s.setMe);
+  // 마운트 시점의 rematchMatchedAt으로 초기화 — 이전 리매치의 잔여값이 즉시 navigation을 유발하는 것 방지
+  const handledRematchAt = useRef<number | null>(rematchMatchedAt);
+  // 프로그래매틱 이탈 여부 추적 — 홈/리매치 버튼 및 자동 이동 시 beforeRemove leaveRoom 방지
+  const hasNavigatedAway = useRef(false);
   const color = result === 'win' ? C.lime : result === 'lose' ? C.pink : C.yellow;
   const label = result === 'win' ? 'WIN' : result === 'lose' ? 'LOSE' : 'DRAW';
 
@@ -24,21 +34,37 @@ export default function GameResultScreen({ navigation, route }: Props) {
     fetchMe().then(setMe).catch(() => {});
   }, [setMe]);
 
+  useEffect(() => {
+    if (!rematchMatchedAt || handledRematchAt.current === rematchMatchedAt) return;
+    handledRematchAt.current = rematchMatchedAt;
+    hasNavigatedAway.current = true;
+    navigation.replace('MatchFound', { roomCode: roomCode ?? undefined, opponent: opponent ?? undefined });
+  }, [navigation, opponent, rematchMatchedAt, roomCode]);
+
+  useEffect(() => {
+    if (!goToWaitingRoom || !roomCode) return;
+    clearGoToWaitingRoom();
+    hasNavigatedAway.current = true;
+    navigation.replace('WaitingRoom', { roomCode });
+  }, [goToWaitingRoom, clearGoToWaitingRoom, navigation, roomCode]);
+
+  // 안드로이드 하드웨어 백 버튼 / iOS 스와이프 백 대응
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', () => {
+      if (!hasNavigatedAway.current) {
+        leaveRoom();
+      }
+    });
+    return unsubscribe;
+  }, [navigation, leaveRoom]);
+
   const restartDuel = () => {
-    disconnectSocket();
-    navigation.dispatch(
-      CommonActions.reset({
-        index: 1,
-        routes: [
-          { name: 'MainTabs' },
-          { name: 'DuelLobby' },
-        ],
-      })
-    );
+    requestRematch();
   };
 
   const goHome = () => {
-    disconnectSocket();
+    hasNavigatedAway.current = true;
+    leaveRoom();
     navigation.popToTop();
   };
 
@@ -81,8 +107,16 @@ export default function GameResultScreen({ navigation, route }: Props) {
         </View>
 
         <View style={styles.actions}>
-          <Btn variant="primary" size="lg" full onPress={restartDuel}>
-            다시 대결
+          <Btn
+            variant="primary"
+            size="lg"
+            full
+            disabled={gameStatus === 'rematchWaiting'}
+            onPress={restartDuel}
+          >
+            {gameStatus === 'rematchWaiting'
+              ? '상대 응답 대기 중'
+              : '다시 대결'}
           </Btn>
           <Pressable onPress={goHome} style={styles.homeBtn}>
             <Text style={styles.homeText}>홈으로</Text>

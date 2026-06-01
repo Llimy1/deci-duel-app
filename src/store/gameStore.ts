@@ -15,7 +15,8 @@ type GameStatus =
   | 'countdown'
   | 'playing'
   | 'roundResult'
-  | 'gameOver';
+  | 'gameOver'
+  | 'rematchWaiting';
 
 type ServerOpponent = {
   userId: number;
@@ -57,6 +58,8 @@ interface GameSocketState {
   status: GameStatus;
   roomCode: string | null;
   opponent: OpponentInfo | null;
+  isHost: boolean;
+  goToWaitingRoom: boolean;
   countdown: number | null;
   currentRound: number;
   myScore: number;
@@ -65,16 +68,24 @@ interface GameSocketState {
   roundResults: RoundRecord[];
   finalResult: NormalizedGameOver | null;
   disconnectedWaitSecs: number | null;
+  opponentReady: boolean;
+  opponentDb: number;
+  opponentPeakDb: number;
+  rematchMatchedAt: number | null;
   errorMessage: string | null;
   hasSubmittedRound: boolean;
   connectSocket: (accessToken: string) => Socket | null;
   disconnectSocket: () => void;
+  leaveRoom: () => void;
   createRoom: () => void;
   joinRoom: (roomCode: string) => void;
-  sendReady: () => void;
+  sendReady: () => boolean;
+  sendRoundDb: (round: number, db: number) => void;
   submitRound: (round: number, peakDb: number) => void;
+  requestRematch: () => void;
   clearRoundSubmit: () => void;
   clearError: () => void;
+  clearGoToWaitingRoom: () => void;
   resetGameState: () => void;
 }
 
@@ -83,6 +94,8 @@ const initialGameState = {
   status: 'idle' as GameStatus,
   roomCode: null,
   opponent: null,
+  isHost: false,
+  goToWaitingRoom: false,
   countdown: null,
   currentRound: 1,
   myScore: 0,
@@ -91,6 +104,10 @@ const initialGameState = {
   roundResults: [],
   finalResult: null,
   disconnectedWaitSecs: null,
+  opponentReady: false,
+  opponentDb: 0,
+  opponentPeakDb: 0,
+  rematchMatchedAt: null,
   errorMessage: null,
   hasSubmittedRound: false,
 };
@@ -120,7 +137,11 @@ function normalizeRound(round: GameOverPayload['rounds'][number]): RoundRecord {
 
 function setupSocketHandlers(socket: Socket) {
   socket.on('connect', () => {
-    useGameStore.setState({ status: 'idle', errorMessage: null });
+    useGameStore.setState((state) => ({
+      // 재연결 시 진행 중인 게임 상태를 idle로 덮어쓰지 않음
+      status: ['connecting', 'idle'].includes(state.status) ? 'idle' : state.status,
+      errorMessage: null,
+    }));
   });
 
   socket.on('connect_error', (error) => {
@@ -138,31 +159,70 @@ function setupSocketHandlers(socket: Socket) {
   socket.on('room:created', ({ roomCode }: { roomCode: string }) => {
     useGameStore.setState({
       roomCode,
+      isHost: true,
       status: 'waiting',
       opponent: null,
       countdown: null,
       roundResult: null,
       roundResults: [],
       finalResult: null,
+      opponentReady: false,
+      opponentDb: 0,
+      opponentPeakDb: 0,
       errorMessage: null,
+      goToWaitingRoom: false,
     });
   });
 
-  socket.on('room:joined', ({ roomCode, opponent }: { roomCode: string; opponent: ServerOpponent }) => {
+  socket.on('room:joined', ({ roomCode, isHost, opponent }: { roomCode: string; isHost: boolean; opponent: ServerOpponent }) => {
     useGameStore.setState({
       roomCode,
+      isHost,
       opponent: toOpponentInfo(opponent),
       status: 'matched',
+      countdown: null,
+      currentRound: 1,
+      myScore: 0,
+      oppScore: 0,
+      roundResult: null,
+      roundResults: [],
+      finalResult: null,
+      rematchMatchedAt: null,
+      disconnectedWaitSecs: null,
+      opponentReady: false,
+      opponentDb: 0,
+      opponentPeakDb: 0,
       errorMessage: null,
+      hasSubmittedRound: false,
+      goToWaitingRoom: false,
     });
   });
 
-  socket.on('opponent:joined', (opponent: ServerOpponent) => {
+  socket.on('opponent:joined', (payload: ServerOpponent & { isHost?: boolean }) => {
     useGameStore.setState({
-      opponent: toOpponentInfo(opponent),
+      opponent: toOpponentInfo(payload),
+      isHost: payload.isHost ?? true,
       status: 'matched',
+      countdown: null,
+      currentRound: 1,
+      myScore: 0,
+      oppScore: 0,
+      roundResult: null,
+      roundResults: [],
+      finalResult: null,
+      rematchMatchedAt: null,
+      disconnectedWaitSecs: null,
+      opponentReady: false,
+      opponentDb: 0,
+      opponentPeakDb: 0,
       errorMessage: null,
+      hasSubmittedRound: false,
+      goToWaitingRoom: false,
     });
+  });
+
+  socket.on('opponent:ready', () => {
+    useGameStore.setState({ opponentReady: true });
   });
 
   socket.on('round:countdown', ({ count }: { count: number }) => {
@@ -180,7 +240,23 @@ function setupSocketHandlers(socket: Socket) {
       currentRound: round,
       countdown: null,
       roundResult: null,
+      opponentReady: false,
+      opponentDb: 0,
+      opponentPeakDb: 0,
       hasSubmittedRound: false,
+      rematchMatchedAt: null,
+      goToWaitingRoom: false,
+    });
+  });
+
+  socket.on('opponent:db', ({ round, db }: { round: number; db: number }) => {
+    useGameStore.setState((state) => {
+      if (state.currentRound !== round) return state;
+      const clampedDb = Math.max(0, Math.min(200, db));
+      return {
+        opponentDb: clampedDb,
+        opponentPeakDb: Math.max(state.opponentPeakDb, clampedDb),
+      };
     });
   });
 
@@ -214,9 +290,94 @@ function setupSocketHandlers(socket: Socket) {
     });
   });
 
+  socket.on('rematch:waiting', ({ roomCode }: { roomCode: string }) => {
+    useGameStore.setState({
+      roomCode,
+      status: 'rematchWaiting',
+      finalResult: null,
+      errorMessage: null,
+    });
+  });
+
+  socket.on('rematch:matched', ({ roomCode }: { roomCode: string }) => {
+    useGameStore.setState((state) => ({
+      roomCode,
+      status: 'matched',
+      countdown: null,
+      currentRound: 1,
+      myScore: 0,
+      oppScore: 0,
+      roundResult: null,
+      roundResults: [],
+      finalResult: null,
+      disconnectedWaitSecs: null,
+      opponentReady: false,
+      opponentDb: 0,
+      opponentPeakDb: 0,
+      rematchMatchedAt: Date.now(),
+      hasSubmittedRound: false,
+      socket: state.socket,
+      opponent: state.opponent,
+    }));
+  });
+
+  socket.on('opponent:left', () => {
+    // 게스트가 나감 → 방장은 WaitingRoom으로 이동, 게임 상태 초기화
+    useGameStore.setState({
+      status: 'waiting',
+      opponent: null,
+      countdown: null,
+      currentRound: 1,
+      myScore: 0,
+      oppScore: 0,
+      roundResult: null,
+      roundResults: [],
+      finalResult: null,
+      rematchMatchedAt: null,
+      disconnectedWaitSecs: null,
+      opponentReady: false,
+      opponentDb: 0,
+      opponentPeakDb: 0,
+      errorMessage: null,
+      hasSubmittedRound: false,
+      goToWaitingRoom: true,
+    });
+  });
+
+  socket.on('room:host_transferred', ({ roomCode }: { roomCode: string }) => {
+    // 방장이 나감 → 내가 새 방장으로 승격, 게임 상태 초기화
+    useGameStore.setState({
+      roomCode,
+      isHost: true,
+      status: 'waiting',
+      opponent: null,
+      countdown: null,
+      currentRound: 1,
+      myScore: 0,
+      oppScore: 0,
+      roundResult: null,
+      roundResults: [],
+      finalResult: null,
+      rematchMatchedAt: null,
+      disconnectedWaitSecs: null,
+      opponentReady: false,
+      opponentDb: 0,
+      opponentPeakDb: 0,
+      errorMessage: null,
+      hasSubmittedRound: false,
+      goToWaitingRoom: true,
+    });
+    Toast.info('방장이 되었습니다.');
+  });
+
   socket.on('opponent:disconnected', ({ waitSecs }: { waitSecs: number }) => {
     useGameStore.setState({ disconnectedWaitSecs: waitSecs });
-    Toast.info(`상대방 연결이 끊겼습니다. ${waitSecs}초 대기 중...`, 3000);
+    Toast.info(
+      waitSecs > 0
+        ? `상대방 연결이 끊겼습니다. ${waitSecs}초 대기 중...`
+        : '상대방 연결이 끊겼습니다.',
+      3000
+    );
   });
 
   socket.on('opponent:reconnected', () => {
@@ -224,12 +385,43 @@ function setupSocketHandlers(socket: Socket) {
     Toast.success('상대방이 다시 연결되었습니다.');
   });
 
-  socket.on('room:reconnected', ({ roomCode, currentRound }: { roomCode: string; state: string; currentRound: number }) => {
+  socket.on('room:reconnected', ({
+    roomCode, isHost, myScore, oppScore, roundResults, opponent,
+  }: {
+    roomCode: string;
+    isHost: boolean;
+    myScore: number;
+    oppScore: number;
+    roundResults: Array<{ round: number; myDb: number; oppDb: number }>;
+    opponent: { userId: number; nickname: string; avatarColor: string; profileImageUrl: string | null; bestDb: number } | null;
+  }) => {
+    const normalizedRounds: RoundRecord[] = roundResults.map((r) => ({
+      round: r.round,
+      myDb: r.myDb,
+      oppDb: r.oppDb,
+      result: r.myDb === r.oppDb ? 'draw' : r.myDb > r.oppDb ? 'win' : 'lose',
+    }));
+    const opponentInfo: OpponentInfo | null = opponent
+      ? {
+          id: opponent.userId,
+          nickname: opponent.nickname,
+          avatarColor: opponent.avatarColor,
+          profileImageUrl: opponent.profileImageUrl,
+          bestDb: opponent.bestDb,
+        }
+      : null;
     useGameStore.setState({
       roomCode,
-      currentRound,
+      isHost,
+      myScore,
+      oppScore,
+      currentRound: roundResults.length + 1,
+      roundResults: normalizedRounds,
+      opponent: opponentInfo,
       disconnectedWaitSecs: null,
+      status: 'matched', // 서버가 이어서 round:countdown 또는 round:start를 전송
     });
+    Toast.success('게임에 다시 연결되었습니다.');
   });
 
   socket.on('error', ({ message }: { message: string }) => {
@@ -267,6 +459,20 @@ export const useGameStore = create<GameSocketState>((set, get) => ({
     socket?.disconnect();
     set({ ...initialGameState });
   },
+  leaveRoom: () => {
+    const { socket } = get();
+    if (socket?.connected) {
+      socket.emit('room:leave');
+      setTimeout(() => {
+        socket.removeAllListeners();
+        socket.disconnect();
+      }, 80);
+    } else {
+      socket?.removeAllListeners();
+      socket?.disconnect();
+    }
+    set({ ...initialGameState });
+  },
   createRoom: () => {
     const { socket } = get();
     if (!socket?.connected) {
@@ -281,6 +487,9 @@ export const useGameStore = create<GameSocketState>((set, get) => ({
       roundResult: null,
       roundResults: [],
       finalResult: null,
+      opponentReady: false,
+      opponentDb: 0,
+      opponentPeakDb: 0,
       errorMessage: null,
       hasSubmittedRound: false,
     });
@@ -300,6 +509,9 @@ export const useGameStore = create<GameSocketState>((set, get) => ({
       roundResult: null,
       roundResults: [],
       finalResult: null,
+      opponentReady: false,
+      opponentDb: 0,
+      opponentPeakDb: 0,
       errorMessage: null,
       hasSubmittedRound: false,
     });
@@ -309,10 +521,16 @@ export const useGameStore = create<GameSocketState>((set, get) => ({
     const { socket } = get();
     if (!socket?.connected) {
       Toast.error('게임 서버에 연결되지 않았습니다.');
-      return;
+      return false;
     }
     set({ status: 'ready' });
     socket.emit('game:ready');
+    return true;
+  },
+  sendRoundDb: (round, db) => {
+    const { socket } = get();
+    if (!socket?.connected) return;
+    socket.emit('round:db', { round, db: Math.max(0, Math.min(200, db)) });
   },
   submitRound: (round, peakDb) => {
     const { socket, hasSubmittedRound } = get();
@@ -320,7 +538,16 @@ export const useGameStore = create<GameSocketState>((set, get) => ({
     set({ hasSubmittedRound: true });
     socket.emit('round:submit', { round, peakDb: Math.max(0, Math.min(200, peakDb)) });
   },
+  requestRematch: () => {
+    const { socket } = get();
+    if (!socket?.connected) {
+      Toast.error('게임 서버에 연결되지 않았습니다.');
+      return;
+    }
+    socket.emit('game:rematch');
+  },
   clearRoundSubmit: () => set({ hasSubmittedRound: false }),
   clearError: () => set({ errorMessage: null }),
+  clearGoToWaitingRoom: () => set({ goToWaitingRoom: false }),
   resetGameState: () => set((state) => ({ ...initialGameState, socket: state.socket })),
 }));
