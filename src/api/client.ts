@@ -1,6 +1,7 @@
 import { useAppStore } from '../store';
 import { clearTokens, getTokens, saveTokens } from '../utils/secureStorage';
 import { Toast } from '../utils/toast';
+import { getIsOnline } from '../utils/networkStatus';
 
 export interface ApiResponse<T> {
   statusCode: number;
@@ -89,6 +90,11 @@ async function request<T>(
 ): Promise<ApiResponse<T>> {
   const retryOnUnauthorized = options.retryOnUnauthorized ?? true;
   const token = options.skipAuth ? null : useAppStore.getState().accessToken;
+
+  // 오프라인 상태면 fetch 대기 없이 즉시 에러
+  if (!getIsOnline()) {
+    throw new Error('인터넷 연결을 확인해주세요.');
+  }
 
   let response: Response;
   try {

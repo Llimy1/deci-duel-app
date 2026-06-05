@@ -482,7 +482,7 @@ const styles = StyleSheet.create({
   },
   statusChip: {
     width: 68,
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
   },
   vizSection: {
     flex: 1,

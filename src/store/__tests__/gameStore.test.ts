@@ -40,7 +40,8 @@ const INITIAL_STATE_FIELDS = {
   roomCode: null,
   opponent: null,
   isHost: false,
-  goToWaitingRoom: false,
+  opponentLeft: false,
+  matchSessionId: null,
   countdown: null,
   currentRound: 1,
   myScore: 0,
@@ -50,11 +51,16 @@ const INITIAL_STATE_FIELDS = {
   finalResult: null,
   disconnectedWaitSecs: null,
   opponentReady: false,
+  opponentMicReady: false,
   opponentDb: 0,
   opponentPeakDb: 0,
+  roundDurationMs: 5000,
+  prepareTimeoutMs: null,
   rematchMatchedAt: null,
   errorMessage: null,
   hasSubmittedRound: false,
+  matchPrepareFailed: false,
+  matchPrepareFailedMessage: null,
 };
 
 beforeEach(() => {
@@ -225,5 +231,247 @@ describe('opponent:reconnected', () => {
     useGameStore.setState({ disconnectedWaitSecs: 5 });
     trigger('opponent:reconnected');
     expect(useGameStore.getState().disconnectedWaitSecs).toBeNull();
+  });
+});
+
+/* ───────────────── [23:49] 마이크 준비 handshake ───────────────── */
+
+describe('round:prepare', () => {
+  it('status를 preparing으로 바꾸고 라운드별 상태를 초기화한다', () => {
+    useGameStore.setState({ opponentMicReady: true, opponentDb: 50, hasSubmittedRound: true });
+    trigger('round:prepare', { round: 2, prepareTimeoutMs: 3000 });
+
+    const s = useGameStore.getState();
+    expect(s.status).toBe('preparing');
+    expect(s.currentRound).toBe(2);
+    expect(s.opponentMicReady).toBe(false);
+    expect(s.opponentDb).toBe(0);
+    expect(s.hasSubmittedRound).toBe(false);
+    expect(s.countdown).toBeNull();
+  });
+
+  it('prepareTimeoutMs를 state에 저장한다', () => {
+    trigger('round:prepare', { round: 1, prepareTimeoutMs: 3000 });
+    expect(useGameStore.getState().prepareTimeoutMs).toBe(3000);
+  });
+
+  it('prepareTimeoutMs가 없으면 null로 저장한다 (구 서버 호환)', () => {
+    useGameStore.setState({ prepareTimeoutMs: 3000 });
+    trigger('round:prepare', { round: 1 });
+    expect(useGameStore.getState().prepareTimeoutMs).toBeNull();
+  });
+});
+
+describe('opponent:mic-ready', () => {
+  it('opponentMicReady를 true로 설정한다', () => {
+    expect(useGameStore.getState().opponentMicReady).toBe(false);
+    trigger('opponent:mic-ready');
+    expect(useGameStore.getState().opponentMicReady).toBe(true);
+  });
+});
+
+describe('round:start', () => {
+  it('durationMs를 roundDurationMs에 저장하고 playing으로 전환한다', () => {
+    trigger('round:start', { round: 3, durationMs: 5000 });
+    const s = useGameStore.getState();
+    expect(s.status).toBe('playing');
+    expect(s.currentRound).toBe(3);
+    expect(s.roundDurationMs).toBe(5000);
+    expect(s.opponentMicReady).toBe(false);
+  });
+
+  it('durationMs가 없으면 기본 5000ms를 사용한다 (구 서버 호환)', () => {
+    useGameStore.setState({ roundDurationMs: 9999 });
+    trigger('round:start', { round: 1 });
+    expect(useGameStore.getState().roundDurationMs).toBe(5000);
+  });
+});
+
+describe('sendMicReady', () => {
+  it('소켓 미연결 시 false를 반환하고 emit하지 않는다', () => {
+    mockSocket.connected = false;
+    const result = useGameStore.getState().sendMicReady(1);
+    expect(result).toBe(false);
+    mockSocket.connected = true;
+  });
+
+  it('소켓 연결 시 round:mic-ready를 emit하고 true를 반환한다', () => {
+    mockSocket.connected = true;
+    useGameStore.setState({ socket: mockSocket as never });
+    const result = useGameStore.getState().sendMicReady(2);
+    expect(result).toBe(true);
+    expect(mockSocket.emit).toHaveBeenCalledWith('round:mic-ready', { round: 2 });
+  });
+});
+
+describe('match:prepare-failed', () => {
+  it('수신 시 matchPrepareFailed=true, status=matched, 게임 상태 초기화', () => {
+    // preparing 상태에서 시작
+    useGameStore.setState({
+      status: 'preparing',
+      currentRound: 2,
+      finalResult: { result: 'win', myScore: 1, oppScore: 0, rounds: [] } as any,
+      hasSubmittedRound: true,
+    });
+
+    trigger('match:prepare-failed', {
+      reason: 'mic_prepare_failed',
+      failedUserIds: [1],
+      round: 2,
+      retryable: true,
+      message: '마이크를 준비하지 못해 대결 시작이 취소되었습니다.',
+    });
+
+    const state = useGameStore.getState();
+    expect(state.matchPrepareFailed).toBe(true);
+    expect(state.status).toBe('matched');
+    expect(state.currentRound).toBe(1);
+    expect(state.finalResult).toBeNull();
+    expect(state.hasSubmittedRound).toBe(false);
+    expect(state.matchPrepareFailedMessage).toBe('마이크를 준비하지 못해 대결 시작이 취소되었습니다.');
+  });
+
+  it('match:prepare-failed 수신 후 opponentLeft는 변경되지 않는다 (방에 아직 있음)', () => {
+    // match:prepare-failed는 game:over가 아님 — 방에 두 명 고정, opponentLeft는 false 유지
+    useGameStore.setState({ status: 'preparing', opponentLeft: false });
+    trigger('match:prepare-failed', { reason: 'timeout', failedUserIds: [1], round: 1, retryable: true, message: 'test' });
+    expect(useGameStore.getState().opponentLeft).toBe(false);
+    expect(useGameStore.getState().matchPrepareFailed).toBe(true);
+  });
+
+  it('clearMatchPrepareFailed() 호출 시 초기화', () => {
+    useGameStore.setState({ matchPrepareFailed: true, matchPrepareFailedMessage: 'test' });
+    useGameStore.getState().clearMatchPrepareFailed();
+    expect(useGameStore.getState().matchPrepareFailed).toBe(false);
+    expect(useGameStore.getState().matchPrepareFailedMessage).toBeNull();
+  });
+
+  it('round:prepare 수신 시 matchPrepareFailed 초기화', () => {
+    useGameStore.setState({ matchPrepareFailed: true });
+    trigger('round:prepare', { round: 1, prepareTimeoutMs: 8000 });
+    expect(useGameStore.getState().matchPrepareFailed).toBe(false);
+  });
+
+  it('remainingPrepareTimeoutMs가 prepareTimeoutMs보다 우선', () => {
+    trigger('round:prepare', {
+      round: 1,
+      prepareTimeoutMs: 8000,
+      remainingPrepareTimeoutMs: 3500,
+    });
+    expect(useGameStore.getState().prepareTimeoutMs).toBe(3500);
+  });
+});
+
+describe('sendMicError', () => {
+  it('reason과 함께 round:mic-error를 emit한다', () => {
+    mockSocket.connected = true;
+    useGameStore.setState({ socket: mockSocket as never });
+    useGameStore.getState().sendMicError(1, 'mic_not_ready');
+    expect(mockSocket.emit).toHaveBeenCalledWith('round:mic-error', { round: 1, reason: 'mic_not_ready' });
+  });
+
+  it('reason이 없으면 round만 포함해 emit한다', () => {
+    mockSocket.connected = true;
+    useGameStore.setState({ socket: mockSocket as never });
+    useGameStore.getState().sendMicError(1);
+    expect(mockSocket.emit).toHaveBeenCalledWith('round:mic-error', { round: 1 });
+  });
+
+  it('소켓 미연결 시 emit하지 않는다', () => {
+    mockSocket.connected = false;
+    useGameStore.getState().sendMicError(1);
+    expect(mockSocket.emit).not.toHaveBeenCalledWith('round:mic-error', expect.anything());
+    mockSocket.connected = true;
+  });
+});
+
+/* ─────────────────────────── opponent:left ────────────────────────────── */
+
+describe('opponent:left', () => {
+  it('opponentLeft=true, status=waiting으로 전환하고 게임 상태를 초기화한다', () => {
+    useGameStore.setState({
+      status: 'matched',
+      opponent: { id: 2, nickname: 'B', avatarColor: '#fff', profileImageUrl: null, bestDb: 80 },
+      myScore: 1,
+      oppScore: 0,
+      currentRound: 2,
+      opponentLeft: false,
+    });
+
+    trigger('opponent:left', {});
+
+    const s = useGameStore.getState();
+    expect(s.opponentLeft).toBe(true);
+    expect(s.status).toBe('waiting');
+    expect(s.opponent).toBeNull();
+    expect(s.myScore).toBe(0);
+    expect(s.currentRound).toBe(1);
+  });
+
+  it('payload 없이 수신해도 처리된다 (구 서버 호환)', () => {
+    // 일부 서버는 빈 payload를 보낼 수 있음
+    expect(() => trigger('opponent:left', undefined)).not.toThrow();
+    expect(useGameStore.getState().opponentLeft).toBe(true);
+  });
+
+  it('clearOpponentLeft() 호출 시 초기화', () => {
+    useGameStore.setState({ opponentLeft: true });
+    useGameStore.getState().clearOpponentLeft();
+    expect(useGameStore.getState().opponentLeft).toBe(false);
+  });
+});
+
+/* ─────────────────────────── room:host_transferred ────────────────────── */
+
+describe('room:host_transferred', () => {
+  it('opponentLeft=true, isHost=true, status=waiting으로 전환한다', () => {
+    useGameStore.setState({
+      status: 'matched',
+      isHost: false,
+      roomCode: 'OLD',
+      opponentLeft: false,
+    });
+
+    trigger('room:host_transferred', { roomCode: 'NEW' });
+
+    const s = useGameStore.getState();
+    expect(s.opponentLeft).toBe(true);
+    expect(s.isHost).toBe(true);
+    expect(s.roomCode).toBe('NEW');
+    expect(s.status).toBe('waiting');
+    expect(s.opponent).toBeNull();
+  });
+});
+
+/* ─────────────────────────── matchSessionId ───────────────────────────── */
+
+describe('matchSessionId', () => {
+  it('room:joined 에서 matchSessionId를 저장한다', () => {
+    trigger('room:joined', {
+      roomCode: 'ABC1',
+      isHost: false,
+      opponent: { userId: 2, nickname: 'B', avatarColor: '#fff' },
+      matchSessionId: 'sess-001',
+    });
+    expect(useGameStore.getState().matchSessionId).toBe('sess-001');
+  });
+
+  it('opponent:joined 에서 matchSessionId를 저장한다', () => {
+    trigger('opponent:joined', {
+      userId: 2,
+      nickname: 'B',
+      avatarColor: '#fff',
+      matchSessionId: 'sess-002',
+    });
+    expect(useGameStore.getState().matchSessionId).toBe('sess-002');
+  });
+
+  it('matchSessionId 없는 이벤트는 null로 저장 (구 서버 호환)', () => {
+    trigger('room:joined', {
+      roomCode: 'ABC2',
+      isHost: true,
+      opponent: { userId: 3, nickname: 'C', avatarColor: '#abc' },
+    });
+    expect(useGameStore.getState().matchSessionId).toBeNull();
   });
 });

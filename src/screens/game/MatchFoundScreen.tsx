@@ -23,8 +23,7 @@ export default function MatchFoundScreen({ navigation, route }: Props) {
   const opponentReady = useGameStore((s) => s.opponentReady);
   const sendReady = useGameStore((s) => s.sendReady);
   const leaveRoom = useGameStore((s) => s.leaveRoom);
-  const goToWaitingRoom = useGameStore((s) => s.goToWaitingRoom);
-  const clearGoToWaitingRoom = useGameStore((s) => s.clearGoToWaitingRoom);
+  const opponentLeft = useGameStore((s) => s.opponentLeft);
   const disconnectedWaitSecs = useGameStore((s) => s.disconnectedWaitSecs);
   const errorMessage = useGameStore((s) => s.errorMessage);
   const routeOpponent = route.params?.opponent;
@@ -56,19 +55,24 @@ export default function MatchFoundScreen({ navigation, route }: Props) {
   const disconnectWasPositiveRef = useRef(false);
 
   useEffect(() => {
-    if (gameStatus !== 'playing' || hasNavigatedToGame.current) return;
+    if (gameStatus === 'matched') {
+      setMeReady(false);
+      hasNavigatedToGame.current = false;
+      return;
+    }
+    if (!['countdown', 'preparing', 'playing'].includes(gameStatus) || hasNavigatedToGame.current) return;
     hasNavigatedToGame.current = true;
     hasNavigatedAway.current = true;
     startMatch({ name: opponent.nickname, bestDb: opponent.bestDb });
     navigation.replace('Game', { roomCode, opponent });
   }, [gameStatus, navigation, opponent, roomCode, startMatch]);
 
+  // 상대방이 나감 → WaitingRoom의 "상대가 나갔습니다" UI로 이동
   useEffect(() => {
-    if (!goToWaitingRoom || !roomCode) return;
-    clearGoToWaitingRoom();
+    if (!opponentLeft) return;
     hasNavigatedAway.current = true;
-    navigation.replace('WaitingRoom', { roomCode });
-  }, [goToWaitingRoom, clearGoToWaitingRoom, navigation, roomCode]);
+    navigation.replace('WaitingRoom', { roomCode: roomCode ?? '' });
+  }, [opponentLeft, navigation, roomCode]);
 
   useEffect(() => {
     if (!finalResult || hasHandledFinalResult.current) return;

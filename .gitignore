@@ -46,3 +46,6 @@ yarn-error.*
 local.properties
 local.properties
 .env
+
+# Claude Code
+.claude/

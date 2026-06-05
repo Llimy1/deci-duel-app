@@ -20,8 +20,8 @@ export default function GameResultScreen({ navigation, route }: Props) {
   const gameStatus = useGameStore((s) => s.status);
   const roomCode = useGameStore((s) => s.roomCode);
   const opponent = useGameStore((s) => s.opponent);
-  const goToWaitingRoom = useGameStore((s) => s.goToWaitingRoom);
-  const clearGoToWaitingRoom = useGameStore((s) => s.clearGoToWaitingRoom);
+  const opponentLeft = useGameStore((s) => s.opponentLeft);
+  const switchToNewRoom = useGameStore((s) => s.switchToNewRoom);
   const setMe = useAppStore((s) => s.setMe);
   // 마운트 시점의 rematchMatchedAt으로 초기화 — 이전 리매치의 잔여값이 즉시 navigation을 유발하는 것 방지
   const handledRematchAt = useRef<number | null>(rematchMatchedAt);
@@ -41,12 +41,8 @@ export default function GameResultScreen({ navigation, route }: Props) {
     navigation.replace('MatchFound', { roomCode: roomCode ?? undefined, opponent: opponent ?? undefined });
   }, [navigation, opponent, rematchMatchedAt, roomCode]);
 
-  useEffect(() => {
-    if (!goToWaitingRoom || !roomCode) return;
-    clearGoToWaitingRoom();
-    hasNavigatedAway.current = true;
-    navigation.replace('WaitingRoom', { roomCode });
-  }, [goToWaitingRoom, clearGoToWaitingRoom, navigation, roomCode]);
+  // 상대방이 결과 화면 도중 나간 경우 → canRematch=false로 버튼 전환 (자동 이동 없음)
+  // opponentLeft는 reactive하므로 버튼이 즉시 "새 방 만들기"로 바뀜
 
   // 안드로이드 하드웨어 백 버튼 / iOS 스와이프 백 대응
   useEffect(() => {
@@ -58,8 +54,18 @@ export default function GameResultScreen({ navigation, route }: Props) {
     return unsubscribe;
   }, [navigation, leaveRoom]);
 
+  // 다시 대결 가능 조건: 포기전 없음 + 상대방이 아직 방에 있음
+  const canRematch = !forfeit && !opponentLeft;
+
   const restartDuel = () => {
     requestRematch();
+  };
+
+  // "새 방 만들기" — 기존 방 정리 후 새 방 생성 → WaitingRoom으로 이동
+  const handleCreateNewRoom = () => {
+    hasNavigatedAway.current = true;
+    switchToNewRoom();
+    navigation.replace('WaitingRoom', { roomCode: roomCode ?? '' });
   };
 
   const goHome = () => {
@@ -107,17 +113,26 @@ export default function GameResultScreen({ navigation, route }: Props) {
         </View>
 
         <View style={styles.actions}>
-          <Btn
-            variant="primary"
-            size="lg"
-            full
-            disabled={gameStatus === 'rematchWaiting'}
-            onPress={restartDuel}
-          >
-            {gameStatus === 'rematchWaiting'
-              ? '상대 응답 대기 중'
-              : '다시 대결'}
-          </Btn>
+          {canRematch ? (
+            <Btn
+              variant="primary"
+              size="lg"
+              full
+              disabled={gameStatus === 'rematchWaiting'}
+              onPress={restartDuel}
+            >
+              {gameStatus === 'rematchWaiting' ? '상대 응답 대기 중' : '다시 대결'}
+            </Btn>
+          ) : (
+            <Btn
+              variant="primary"
+              size="lg"
+              full
+              onPress={handleCreateNewRoom}
+            >
+              새 방 만들기
+            </Btn>
+          )}
           <Pressable onPress={goHome} style={styles.homeBtn}>
             <Text style={styles.homeText}>홈으로</Text>
           </Pressable>

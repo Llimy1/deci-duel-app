@@ -13,6 +13,7 @@ type GameStatus =
   | 'matched'
   | 'ready'
   | 'countdown'
+  | 'preparing'
   | 'playing'
   | 'roundResult'
   | 'gameOver'
@@ -59,7 +60,10 @@ interface GameSocketState {
   roomCode: string | null;
   opponent: OpponentInfo | null;
   isHost: boolean;
-  goToWaitingRoom: boolean;
+  /** 상대방이 명시적으로 방을 나감. 각 화면에서 "상대가 나갔습니다" UI 트리거 */
+  opponentLeft: boolean;
+  /** 서버가 구현되면 채워지는 세션 ID — stale 이벤트 guard용 */
+  matchSessionId: string | null;
   countdown: number | null;
   currentRound: number;
   myScore: number;
@@ -69,23 +73,36 @@ interface GameSocketState {
   finalResult: NormalizedGameOver | null;
   disconnectedWaitSecs: number | null;
   opponentReady: boolean;
+  opponentMicReady: boolean;
   opponentDb: number;
   opponentPeakDb: number;
+  roundDurationMs: number;
+  /** 서버가 round:prepare에서 내려준 prepare timeout(ms). null이면 서버가 handshake 미지원 */
+  prepareTimeoutMs: number | null;
   rematchMatchedAt: number | null;
   errorMessage: string | null;
   hasSubmittedRound: boolean;
+  /** match:prepare-failed 이벤트 수신 시 true. GameScreen → MatchFound 이동 트리거 */
+  matchPrepareFailed: boolean;
+  /** match:prepare-failed 이유 메시지 */
+  matchPrepareFailedMessage: string | null;
   connectSocket: (accessToken: string) => Socket | null;
   disconnectSocket: () => void;
   leaveRoom: () => void;
   createRoom: () => void;
   joinRoom: (roomCode: string) => void;
+  /** 기존 방을 정리하고 새 방을 생성 (소켓 유지) — "새 방 만들기" UX용 */
+  switchToNewRoom: () => void;
   sendReady: () => boolean;
+  sendMicReady: (round: number) => boolean;
+  sendMicError: (round: number, reason?: string) => void;
   sendRoundDb: (round: number, db: number) => void;
   submitRound: (round: number, peakDb: number) => void;
   requestRematch: () => void;
   clearRoundSubmit: () => void;
   clearError: () => void;
-  clearGoToWaitingRoom: () => void;
+  clearOpponentLeft: () => void;
+  clearMatchPrepareFailed: () => void;
   resetGameState: () => void;
 }
 
@@ -95,7 +112,8 @@ const initialGameState = {
   roomCode: null,
   opponent: null,
   isHost: false,
-  goToWaitingRoom: false,
+  opponentLeft: false,
+  matchSessionId: null,
   countdown: null,
   currentRound: 1,
   myScore: 0,
@@ -105,11 +123,16 @@ const initialGameState = {
   finalResult: null,
   disconnectedWaitSecs: null,
   opponentReady: false,
+  opponentMicReady: false,
   opponentDb: 0,
   opponentPeakDb: 0,
+  roundDurationMs: 5000,
+  prepareTimeoutMs: null,
   rematchMatchedAt: null,
   errorMessage: null,
   hasSubmittedRound: false,
+  matchPrepareFailed: false,
+  matchPrepareFailedMessage: null,
 };
 
 function toOpponentInfo(opponent: ServerOpponent): OpponentInfo {
@@ -170,16 +193,18 @@ function setupSocketHandlers(socket: Socket) {
       opponentDb: 0,
       opponentPeakDb: 0,
       errorMessage: null,
-      goToWaitingRoom: false,
+      opponentLeft: false,
+      matchSessionId: null,
     });
   });
 
-  socket.on('room:joined', ({ roomCode, isHost, opponent }: { roomCode: string; isHost: boolean; opponent: ServerOpponent }) => {
+  socket.on('room:joined', ({ roomCode, isHost, opponent, matchSessionId }: { roomCode: string; isHost: boolean; opponent: ServerOpponent; matchSessionId?: string }) => {
     useGameStore.setState({
       roomCode,
       isHost,
       opponent: toOpponentInfo(opponent),
       status: 'matched',
+      matchSessionId: matchSessionId ?? null,
       countdown: null,
       currentRound: 1,
       myScore: 0,
@@ -194,15 +219,16 @@ function setupSocketHandlers(socket: Socket) {
       opponentPeakDb: 0,
       errorMessage: null,
       hasSubmittedRound: false,
-      goToWaitingRoom: false,
+      opponentLeft: false,
     });
   });
 
-  socket.on('opponent:joined', (payload: ServerOpponent & { isHost?: boolean }) => {
+  socket.on('opponent:joined', (payload: ServerOpponent & { isHost?: boolean; matchSessionId?: string }) => {
     useGameStore.setState({
       opponent: toOpponentInfo(payload),
       isHost: payload.isHost ?? true,
       status: 'matched',
+      matchSessionId: payload.matchSessionId ?? null,
       countdown: null,
       currentRound: 1,
       myScore: 0,
@@ -217,7 +243,7 @@ function setupSocketHandlers(socket: Socket) {
       opponentPeakDb: 0,
       errorMessage: null,
       hasSubmittedRound: false,
-      goToWaitingRoom: false,
+      opponentLeft: false,
     });
   });
 
@@ -234,18 +260,59 @@ function setupSocketHandlers(socket: Socket) {
     });
   });
 
-  socket.on('round:start', ({ round }: { round: number }) => {
+  // [23:49 handshake] 서버가 양쪽 마이크 준비를 요청 — round:start 이전 단계.
+  // 구 서버(round:prepare 미전송)에서는 발생하지 않으므로 기존 흐름과 호환된다.
+  socket.on('round:prepare', ({
+    round,
+    prepareTimeoutMs,
+    remainingPrepareTimeoutMs,
+  }: {
+    round: number;
+    prepareTimeoutMs?: number;
+    remainingPrepareTimeoutMs?: number;
+  }) => {
     useGameStore.setState({
-      status: 'playing',
+      status: 'preparing',
       currentRound: round,
+      // remainingPrepareTimeoutMs가 있으면 실제 남은 시간 우선 사용 (재연결 케이스)
+      prepareTimeoutMs: remainingPrepareTimeoutMs ?? prepareTimeoutMs ?? null,
       countdown: null,
       roundResult: null,
       opponentReady: false,
+      opponentMicReady: false,
+      opponentDb: 0,
+      opponentPeakDb: 0,
+      hasSubmittedRound: false,
+      opponentLeft: false,
+      matchPrepareFailed: false,
+      matchPrepareFailedMessage: null,
+    });
+  });
+
+  // 상대방 마이크 준비 완료 (선택적 서버 이벤트) — 준비 대기 UI 갱신용
+  socket.on('opponent:mic-ready', () => {
+    useGameStore.setState({ opponentMicReady: true });
+  });
+
+  // 상대방 마이크 준비 실패 (선택적 서버 이벤트)
+  socket.on('opponent:mic-error', () => {
+    Toast.info('상대방이 마이크를 준비하지 못했습니다.');
+  });
+
+  socket.on('round:start', ({ round, durationMs }: { round: number; durationMs?: number }) => {
+    useGameStore.setState({
+      status: 'playing',
+      currentRound: round,
+      roundDurationMs: durationMs ?? 5000,
+      countdown: null,
+      roundResult: null,
+      opponentReady: false,
+      opponentMicReady: false,
       opponentDb: 0,
       opponentPeakDb: 0,
       hasSubmittedRound: false,
       rematchMatchedAt: null,
-      goToWaitingRoom: false,
+      opponentLeft: false,
     });
   });
 
@@ -299,10 +366,11 @@ function setupSocketHandlers(socket: Socket) {
     });
   });
 
-  socket.on('rematch:matched', ({ roomCode }: { roomCode: string }) => {
+  socket.on('rematch:matched', ({ roomCode, matchSessionId }: { roomCode: string; matchSessionId?: string }) => {
     useGameStore.setState((state) => ({
       roomCode,
       status: 'matched',
+      matchSessionId: matchSessionId ?? null,
       countdown: null,
       currentRound: 1,
       myScore: 0,
@@ -316,14 +384,56 @@ function setupSocketHandlers(socket: Socket) {
       opponentPeakDb: 0,
       rematchMatchedAt: Date.now(),
       hasSubmittedRound: false,
+      opponentLeft: false,
       socket: state.socket,
       opponent: state.opponent,
     }));
   });
 
-  socket.on('opponent:left', () => {
-    // 게스트가 나감 → 방장은 WaitingRoom으로 이동, 게임 상태 초기화
+  socket.on('match:prepare-failed', ({
+    message,
+  }: {
+    reason: string;
+    failedUserIds: number[];
+    round: number;
+    retryable: boolean;
+    message: string;
+  }) => {
+    useGameStore.setState((state) => ({
+      matchPrepareFailed: true,
+      matchPrepareFailedMessage: message,
+      // matched 상태로 복귀, stale game data 초기화
+      status: 'matched',
+      currentRound: 1,
+      myScore: 0,
+      oppScore: 0,
+      roundResult: null,
+      roundResults: [],
+      finalResult: null,
+      opponentReady: false,
+      opponentMicReady: false,
+      hasSubmittedRound: false,
+      prepareTimeoutMs: null,
+      // roomCode, opponent, isHost는 유지 (방에 아직 있음)
+      roomCode: state.roomCode,
+      opponent: state.opponent,
+      isHost: state.isHost,
+    }));
+  });
+
+  socket.on('opponent:left', ({
+    reason,
+    canRematch,
+  }: {
+    roomCode?: string;
+    reason?: 'left' | 'disconnect_timeout' | 'setup_cancel';
+    canWaitForNewOpponent?: boolean;
+    canRematch?: boolean;
+  } = {}) => {
+    // 상대방이 명시적으로 나감 → opponentLeft=true로 각 화면에서 "새 방 만들기/홈으로" UI 표시
+    // (canRematch, reason은 서버 구현 후 활용 예정)
     useGameStore.setState({
+      opponentLeft: true,
       status: 'waiting',
       opponent: null,
       countdown: null,
@@ -340,15 +450,23 @@ function setupSocketHandlers(socket: Socket) {
       opponentPeakDb: 0,
       errorMessage: null,
       hasSubmittedRound: false,
-      goToWaitingRoom: true,
     });
   });
 
-  socket.on('room:host_transferred', ({ roomCode }: { roomCode: string }) => {
-    // 방장이 나감 → 내가 새 방장으로 승격, 게임 상태 초기화
+  socket.on('room:host_transferred', ({
+    roomCode,
+    canRematch,
+  }: {
+    roomCode: string;
+    canWaitForNewOpponent?: boolean;
+    canRematch?: boolean;
+  }) => {
+    // 방장이 나감 → 내가 새 방장으로 승격
+    // (canRematch는 서버 구현 후 활용 예정)
     useGameStore.setState({
       roomCode,
       isHost: true,
+      opponentLeft: true,
       status: 'waiting',
       opponent: null,
       countdown: null,
@@ -365,9 +483,7 @@ function setupSocketHandlers(socket: Socket) {
       opponentPeakDb: 0,
       errorMessage: null,
       hasSubmittedRound: false,
-      goToWaitingRoom: true,
     });
-    Toast.info('방장이 되었습니다.');
   });
 
   socket.on('opponent:disconnected', ({ waitSecs }: { waitSecs: number }) => {
@@ -527,6 +643,17 @@ export const useGameStore = create<GameSocketState>((set, get) => ({
     socket.emit('game:ready');
     return true;
   },
+  sendMicReady: (round) => {
+    const { socket } = get();
+    if (!socket?.connected) return false;
+    socket.emit('round:mic-ready', { round });
+    return true;
+  },
+  sendMicError: (round, reason) => {
+    const { socket } = get();
+    if (!socket?.connected) return;
+    socket.emit('round:mic-error', reason ? { round, reason } : { round });
+  },
   sendRoundDb: (round, db) => {
     const { socket } = get();
     if (!socket?.connected) return;
@@ -546,8 +673,20 @@ export const useGameStore = create<GameSocketState>((set, get) => ({
     }
     socket.emit('game:rematch');
   },
+  switchToNewRoom: () => {
+    const { socket } = get();
+    if (!socket?.connected) {
+      Toast.error('게임 서버에 연결되지 않았습니다.');
+      return;
+    }
+    // 기존 방 정리 + 새 방 생성 (소켓 유지 — leaveRoom()은 disconnect하므로 직접 emit)
+    socket.emit('room:leave');
+    set({ ...initialGameState, socket, status: 'waiting' });
+    socket.emit('room:create');
+  },
   clearRoundSubmit: () => set({ hasSubmittedRound: false }),
   clearError: () => set({ errorMessage: null }),
-  clearGoToWaitingRoom: () => set({ goToWaitingRoom: false }),
+  clearOpponentLeft: () => set({ opponentLeft: false }),
+  clearMatchPrepareFailed: () => set({ matchPrepareFailed: false, matchPrepareFailedMessage: null }),
   resetGameState: () => set((state) => ({ ...initialGameState, socket: state.socket })),
 }));

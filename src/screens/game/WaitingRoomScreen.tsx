@@ -19,8 +19,9 @@ export default function WaitingRoomScreen({ navigation, route }: Props) {
   const opponent = useGameStore((s) => s.opponent);
   const finalResult = useGameStore((s) => s.finalResult);
   const leaveRoom = useGameStore((s) => s.leaveRoom);
-  const goToWaitingRoom = useGameStore((s) => s.goToWaitingRoom);
-  const clearGoToWaitingRoom = useGameStore((s) => s.clearGoToWaitingRoom);
+  const opponentLeft = useGameStore((s) => s.opponentLeft);
+  const clearOpponentLeft = useGameStore((s) => s.clearOpponentLeft);
+  const switchToNewRoom = useGameStore((s) => s.switchToNewRoom);
   const roomCode = storeRoomCode ?? routeRoomCode;
   const [elapsed, setElapsed] = useState(0);
   // 프로그래매틱 이탈 여부 추적 — MatchFound로 replace 시 leaveRoom 호출 방지
@@ -31,12 +32,15 @@ export default function WaitingRoomScreen({ navigation, route }: Props) {
     return () => clearInterval(timer);
   }, []);
 
-  // 이미 WaitingRoom에 있을 때 goToWaitingRoom 신호 소비 — navigate 없이 플래그만 초기화
+  // 새 방이 생성되면(switchToNewRoom 이후 roomCode 갱신) 대기 타이머 리셋
+  const prevRoomCodeRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!goToWaitingRoom) return;
-    clearGoToWaitingRoom();
-    setElapsed(0);
-  }, [goToWaitingRoom, clearGoToWaitingRoom]);
+    if (!storeRoomCode) return;
+    if (storeRoomCode !== prevRoomCodeRef.current) {
+      prevRoomCodeRef.current = storeRoomCode;
+      setElapsed(0);
+    }
+  }, [storeRoomCode]);
 
   useEffect(() => {
     if (gameStatus !== 'matched' || !opponent) return;
@@ -60,6 +64,20 @@ export default function WaitingRoomScreen({ navigation, route }: Props) {
     return unsubscribe;
   }, [navigation, leaveRoom]);
 
+  // "새 방 만들기" — 기존 방 leave + 새 room:create (소켓 유지)
+  const handleCreateNewRoom = () => {
+    clearOpponentLeft();
+    switchToNewRoom();
+    // elapsed는 storeRoomCode 변경 시 자동 리셋
+  };
+
+  // "홈으로" — 방 완전 종료 후 홈으로 이동
+  const handleGoHome = () => {
+    hasNavigatedAway.current = true;
+    leaveRoom();
+    navigation.popToTop();
+  };
+
   const copyRoomCode = async () => {
     await Clipboard.setStringAsync(roomCode);
     Toast.success('방 코드가 복사되었습니다.');
@@ -70,6 +88,38 @@ export default function WaitingRoomScreen({ navigation, route }: Props) {
     leaveRoom();
     navigation.goBack();
   };
+
+  // 상대방이 나간 경우 — "새 방 만들기" / "홈으로" 선택 UI
+  if (opponentLeft) {
+    return (
+      <StageBg>
+        <SafeAreaView style={styles.safe}>
+          <Row style={styles.topBar}>
+            <View style={styles.closeBtn} />
+            <View style={styles.topCopy}>
+              <Text style={styles.title}>친구 대결</Text>
+            </View>
+            <View style={styles.closeBtn} />
+          </Row>
+
+          <View style={styles.waitCenter}>
+            <Text style={styles.opponentLeftIcon}>🚪</Text>
+            <Text style={styles.opponentLeftTitle}>상대가 나갔습니다</Text>
+            <Text style={styles.opponentLeftSub}>새 방을 만들거나 홈으로 돌아가세요.</Text>
+          </View>
+
+          <View style={styles.bottom}>
+            <Btn variant="primary" size="lg" full onPress={handleCreateNewRoom}>
+              새 방 만들기
+            </Btn>
+            <Pressable onPress={handleGoHome} style={styles.homeBtn}>
+              <Text style={styles.homeText}>홈으로</Text>
+            </Pressable>
+          </View>
+        </SafeAreaView>
+      </StageBg>
+    );
+  }
 
   return (
     <StageBg>
@@ -229,5 +279,33 @@ const styles = StyleSheet.create({
   bottom: {
     paddingHorizontal: S[5],
     paddingBottom: S[6],
+    gap: S[3],
+  },
+  opponentLeftIcon: {
+    fontSize: 52,
+    marginBottom: S[4],
+  },
+  opponentLeftTitle: {
+    fontFamily: FONTS.headBold,
+    fontSize: FS.xl,
+    color: C.text,
+    textAlign: 'center',
+  },
+  opponentLeftSub: {
+    marginTop: S[2],
+    fontFamily: FONTS.body,
+    fontSize: FS.sm,
+    color: C.textDim,
+    textAlign: 'center',
+  },
+  homeBtn: {
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  homeText: {
+    fontFamily: FONTS.headBold,
+    fontSize: FS.md,
+    color: C.textDim,
   },
 });

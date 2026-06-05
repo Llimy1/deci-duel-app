@@ -12,5 +12,6 @@ module.exports = {
   moduleNameMapper: {
     '^react-native$': '<rootDir>/src/__mocks__/react-native.ts',
     '^expo-.*$': '<rootDir>/src/__mocks__/expo-modules.ts',
+    '^@react-native-community/netinfo$': '<rootDir>/src/__mocks__/netinfo.ts',
   },
 };

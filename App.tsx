@@ -29,6 +29,8 @@ import MainNavigator from './src/navigation/MainNavigator';
 import { ONBOARDING_KEY } from './src/screens/auth/OnboardingScreen';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import ToastContainer from './src/components/ToastContainer';
+import OfflineBanner from './src/components/OfflineBanner';
+import SplashAnimation from './src/components/SplashAnimation';
 import { C } from './src/theme';
 import { getTokens, saveTokens, clearTokens } from './src/utils/secureStorage';
 import { refreshTokens } from './src/api/auth';
@@ -57,6 +59,7 @@ export default function App() {
   const [sessionRestored, setSessionRestored] = useState(false);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [hasOnboarded, setHasOnboarded] = useState(false);
+  const [splashDone, setSplashDone] = useState(false);
   const isLoggedIn = useAppStore((s) => s.isLoggedIn);
   const restoreSession = useAppStore((s) => s.restoreSession);
   const setMe = useAppStore((s) => s.setMe);
@@ -92,13 +95,18 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (sessionExpired && fontsLoaded && sessionRestored) {
+    if (sessionExpired && splashDone && sessionRestored) {
       Toast.info('세션이 만료되었습니다. 다시 로그인해주세요.', 4000);
       setSessionExpired(false);
     }
-  }, [sessionExpired, fontsLoaded, sessionRestored]);
+  }, [sessionExpired, splashDone, sessionRestored]);
 
-  if (!fontsLoaded || !sessionRestored) {
+  // ── Render ──────────────────────────────────────────────────
+  // Overlays (Toast, OfflineBanner) are always rendered so they
+  // can fire even during the splash animation.
+
+  // 1. Fonts not yet loaded (very brief, < 200 ms typically)
+  if (!fontsLoaded) {
     return (
       <View style={{ flex: 1, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' }}>
         <ActivityIndicator color={C.pink} />
@@ -106,6 +114,31 @@ export default function App() {
     );
   }
 
+  // 2. Animated splash (plays once, 5.4 s; session restore runs in background)
+  if (!splashDone) {
+    return (
+      <ErrorBoundary>
+        <SafeAreaProvider>
+          <View style={{ flex: 1 }}>
+            <SplashAnimation onDone={() => setSplashDone(true)} />
+            <StatusBar style="light" />
+            <ToastContainer />
+          </View>
+        </SafeAreaProvider>
+      </ErrorBoundary>
+    );
+  }
+
+  // 3. Splash done; waiting for session restore (should already be done)
+  if (!sessionRestored) {
+    return (
+      <View style={{ flex: 1, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator color={C.pink} />
+      </View>
+    );
+  }
+
+  // 4. Normal app
   return (
     <ErrorBoundary>
       <SafeAreaProvider>
@@ -118,6 +151,7 @@ export default function App() {
           </NavigationContainer>
           <StatusBar style="light" />
           <ToastContainer />
+          <OfflineBanner />
         </View>
       </SafeAreaProvider>
     </ErrorBoundary>

@@ -8,19 +8,28 @@ import GameHeader from '../../components/game/GameHeader';
 import MiniWaveform from '../../components/game/MiniWaveform';
 import { C, FONTS, FS, R, S } from '../../theme';
 import { useMicDb } from '../../hooks/useMicDb';
+import { createGameMicController } from '../../utils/gameMicController';
+import type { GameMicController } from '../../utils/gameMicController';
+import { startMeasureRound } from '../../utils/measureRound';
 import { useAppStore } from '../../store';
 import { useGameStore } from '../../store/gameStore';
+import { Toast } from '../../utils/toast';
 import { MOCK_OPPONENT } from '../../types/game';
 import type { GameStackParamList } from '../../navigation/types';
 import type { OpponentInfo, RoundRecord } from '../../types/game';
 
 const ROUND_SECONDS = 5;
 const TOTAL_ROUNDS = 3;
+// warm-up이 measuring 진입까지 끝나지 않은 경우 최대 대기 시간.
+// 이 시간 안에 ready가 안 되면 실패 처리(Alert + 나가기).
+// 서버 round:prepare 타임아웃(3000ms)보다 약간 짧게 잡아 클라이언트가 먼저 끊는다.
+const MIC_READY_TIMEOUT_MS = 2500;
 const { width } = Dimensions.get('window');
 
 type Props = NativeStackScreenProps<GameStackParamList, 'Game'>;
 type Phase =
   | { type: 'countdown'; n: number }
+  | { type: 'preparing' }
   | { type: 'measuring'; timeLeft: number }
   | { type: 'roundResult'; nextIn: number; record: RoundRecord }
   | { type: 'gameOver' };
@@ -40,18 +49,40 @@ export default function GameScreen({ navigation, route }: Props) {
   const opponentPeakDb = useGameStore((s) => s.opponentPeakDb);
   const sendRoundDb = useGameStore((s) => s.sendRoundDb);
   const submitRound = useGameStore((s) => s.submitRound);
+  const sendMicReady = useGameStore((s) => s.sendMicReady);
+  const sendMicError = useGameStore((s) => s.sendMicError);
+  const opponentMicReady = useGameStore((s) => s.opponentMicReady);
+  const roundDurationMs = useGameStore((s) => s.roundDurationMs);
   const leaveRoom = useGameStore((s) => s.leaveRoom);
   const disconnectedWaitSecs = useGameStore((s) => s.disconnectedWaitSecs);
+  const matchPrepareFailed = useGameStore((s) => s.matchPrepareFailed);
+  const matchPrepareFailedMessage = useGameStore((s) => s.matchPrepareFailedMessage);
+  const clearMatchPrepareFailed = useGameStore((s) => s.clearMatchPrepareFailed);
+  const opponentLeft = useGameStore((s) => s.opponentLeft);
+  const storeRoomCode = useGameStore((s) => s.roomCode);
   const routeOpponent = route.params?.opponent;
   const opponent = useMemo<OpponentInfo>(() => routeOpponent ?? storeOpponent ?? MOCK_OPPONENT, [routeOpponent, storeOpponent]);
 
   const mic = useMicDb();
+
+  // mic 수명주기 컨트롤러 — 컴포넌트 생존 동안 1회 생성 (mic 함수는 모두 stable)
+  const micControllerRef = useRef<GameMicController | null>(null);
+  if (!micControllerRef.current) {
+    micControllerRef.current = createGameMicController(mic);
+  }
+  const micController = micControllerRef.current;
+
   const [phase, setPhase] = useState<Phase>(
     gameStatus === 'playing'
       ? { type: 'measuring', timeLeft: ROUND_SECONDS }
       : { type: 'countdown', n: countdown ?? 3 }
   );
   const [resultNextIn, setResultNextIn] = useState(2);
+  // 공식 측정 활성 여부 — waitForReady 완료 + mic.reset() 이후에만 true.
+  // round:db 전송 / UI 라이브 dB / peak 표시를 warm-up 구간과 분리한다.
+  const [officialMeasuring, setOfficialMeasuring] = useState(false);
+  // preparing 단계에서 내 마이크 준비 완료 여부 (UI 반응성용 — isReady()는 비반응성)
+  const [micWarmReady, setMicWarmReady] = useState(false);
   const [disconnectCountdown, setDisconnectCountdown] = useState<number | null>(null);
   const disconnectWasPositiveRef = useRef(false);
   const pulse = useRef(new Animated.Value(1)).current;
@@ -60,10 +91,14 @@ export default function GameScreen({ navigation, route }: Props) {
   const emitWindowPeak = useRef(0); // 마지막 전송 이후 윈도우 내 peak
 
   const round = storeRound;
+  // 서버 round:start의 durationMs 기준 (구 서버는 기본 5000ms → ROUND_SECONDS와 동일)
+  const roundSeconds = roundDurationMs / 1000;
   const myScore = storeMyScore;
   const oppScore = storeOppScore;
   const isGolden = round === TOTAL_ROUNDS && myScore === oppScore;
-  const myLiveDb = phase.type === 'measuring' ? mic.db : phase.type === 'roundResult' ? phase.record.myDb : 0;
+  // 공식 측정 시작 전(warm-up 대기 구간)에는 라이브 dB/peak를 0으로 — warm-up 노이즈 노출 방지
+  const myLiveDb = phase.type === 'measuring' ? (officialMeasuring ? mic.db : 0) : phase.type === 'roundResult' ? phase.record.myDb : 0;
+  const myLivePeak = phase.type === 'measuring' && officialMeasuring ? mic.peak : 0;
   const oppLiveDb = phase.type === 'measuring' ? opponentDb : phase.type === 'roundResult' ? phase.record.oppDb : 0;
   const oppPeak = phase.type === 'measuring' ? opponentPeakDb : phase.type === 'roundResult' ? phase.record.oppDb : 0;
   const inLastSeconds = phase.type === 'measuring' && phase.timeLeft <= 1.5;
@@ -74,8 +109,13 @@ export default function GameScreen({ navigation, route }: Props) {
       return;
     }
 
+    if (gameStatus === 'preparing') {
+      setPhase({ type: 'preparing' });
+      return;
+    }
+
     if (gameStatus === 'playing') {
-      setPhase({ type: 'measuring', timeLeft: ROUND_SECONDS });
+      setPhase({ type: 'measuring', timeLeft: roundSeconds });
       return;
     }
 
@@ -88,59 +128,122 @@ export default function GameScreen({ navigation, route }: Props) {
       setResultNextIn(2);
       setPhase({ type: 'roundResult', nextIn: 2, record: storeRoundResult });
     }
-  }, [countdown, gameStatus, storeRoundResult]);
+  }, [countdown, gameStatus, storeRoundResult, roundSeconds]);
 
   useEffect(() => {
     if (phase.type !== 'measuring') return;
-    mic.reset();
-    lastDbEmitAt.current = 0;
-    emitWindowPeak.current = 0;
-    let submitted = false;
-    let mounted = true;
-    let timerId: ReturnType<typeof setInterval> | null = null;
 
-    // mic 시작 성공 후 타이머 시작 — 실제 녹음 시작 시점부터 라운드 시간 계산
-    mic.start().then((started) => {
-      if (!mounted) return;
-      if (!started) {
+    const handle = startMeasureRound({
+      roundSeconds,
+      timeoutMs: MIC_READY_TIMEOUT_MS,
+      round,
+      waitForReady: (ms) => micController.waitForReady(ms),
+      micReset: mic.reset,
+      micGetPeak: mic.getPeak,
+      micGetDb: mic.getDb,
+      submitRound,
+      onOfficialMeasuringStart: () => setOfficialMeasuring(true),
+      onOfficialMeasuringEnd: () => setOfficialMeasuring(false),
+      onTimeLeftUpdate: (t) =>
+        setPhase((p) => (p.type === 'measuring' ? { type: 'measuring', timeLeft: t } : p)),
+      onResetRefs: () => {
+        lastDbEmitAt.current = 0;
+        emitWindowPeak.current = 0;
+      },
+      onMicFailed: () =>
         Alert.alert(
           '마이크 오류',
-          '마이크를 시작할 수 없습니다.\n게임을 나가주세요.',
-          [
-            {
-              text: '나가기',
-              style: 'destructive',
-              onPress: () => { leaveRoom(); navigation.goBack(); },
-            },
-          ]
-        );
-        return;
-      }
-
-      const startedAt = Date.now();
-      timerId = setInterval(() => {
-        const elapsed = (Date.now() - startedAt) / 1000;
-        const timeLeft = Math.max(0, Number((ROUND_SECONDS - elapsed).toFixed(1)));
-        setPhase((p) => p.type === 'measuring' ? { type: 'measuring', timeLeft } : p);
-
-        if (timeLeft > 0 || submitted) return;
-        submitted = true;
-        clearInterval(timerId!);
-        void mic.stop();
-        const peakDb = Number(Math.max(mic.getPeak(), mic.getDb()).toFixed(2));
-        submitRound(round, peakDb);
-      }, 100);
+          '마이크를 준비할 수 없습니다.\n게임을 나가주세요.',
+          [{ text: '나가기', style: 'destructive', onPress: () => { leaveRoom(); navigation.goBack(); } }],
+        ),
+      onWindowExpired: () =>
+        Alert.alert(
+          '마이크 오류',
+          '마이크 준비 중 측정 시간이 만료됐습니다.\n게임을 나가주세요.',
+          [{ text: '나가기', style: 'destructive', onPress: () => { leaveRoom(); navigation.goBack(); } }],
+        ),
     });
 
     return () => {
-      mounted = false;
-      if (timerId) clearInterval(timerId);
-      if (!submitted) void mic.stop();
+      handle.cancel();
+      // mic.stop() 제거 — 라운드 사이에 mic을 유지해 재시작 지연 제거
+      // cleanup은 gameOver/unmount useEffect에서 처리
     };
-  }, [mic.getDb, mic.getPeak, mic.reset, mic.start, mic.stop, phase.type, round, submitRound, leaveRoom, navigation]);
+  }, [phase.type, round, roundSeconds, mic.reset, mic.getPeak, mic.getDb, submitRound, leaveRoom, navigation, micController]);
+
+  // countdown 진입 시 mic warm-up — round:start 이전에 마이크 준비 완료
+  // 라운드 2+에서는 이미 ready 상태이므로 no-op
+  useEffect(() => {
+    if (gameStatus !== 'countdown') return;
+    micController.warmUp();
+  }, [gameStatus, micController]);
+
+  // preparing 진입 — warm-up 보장 후 round:mic-ready 전송.
+  // 양쪽 mic-ready를 받은 서버만 round:start를 보내 측정 window를 동기화한다.
+  // 구 서버는 preparing을 보내지 않으므로 이 효과는 트리거되지 않는다(기존 흐름 유지).
+  useEffect(() => {
+    if (gameStatus !== 'preparing') return;
+    let mounted = true;
+    const MIC_ATTEMPT_MS = 3000; // 1회 시도당 warm-up 대기 시간
+
+    const attempt = (): void => {
+      micController.warmUp();
+      void micController.waitForReady(MIC_ATTEMPT_MS).then((ready) => {
+        if (!mounted) return;
+        if (ready) {
+          setMicWarmReady(true);
+          sendMicReady(round);
+          return;
+        }
+        // 실패 시 재시도 또는 나가기 선택
+        // ※ 재시도해도 서버 준비 deadline(8초)은 연장되지 않습니다
+        Alert.alert(
+          '마이크 준비 실패',
+          '마이크를 준비하지 못했습니다.\n재시도해도 서버 대기 시간은 연장되지 않습니다.',
+          [
+            {
+              text: '재시도',
+              onPress: () => {
+                if (!mounted) return;
+                micController.cleanup(); // idle 상태로 리셋
+                attempt();
+              },
+            },
+            {
+              text: '나가기',
+              style: 'destructive',
+              onPress: () => {
+                // match:prepare-failed로 이미 화면이 전환됐을 수 있음 — mounted 확인 필수
+                if (!mounted) return;
+                leaveRoom();
+                navigation.goBack();
+              },
+            },
+          ],
+          { cancelable: false },
+        );
+      });
+    };
+
+    attempt();
+
+    return () => {
+      mounted = false;
+      setMicWarmReady(false);
+    };
+  }, [gameStatus, round, micController, sendMicReady, leaveRoom, navigation]);
+
+  // gameOver / unmount 시 mic 정리 (라운드 사이에는 호출하지 않음)
+  useEffect(() => {
+    return () => {
+      micController.cleanup();
+    };
+  }, [micController]);
 
   useEffect(() => {
     if (phase.type !== 'measuring') return;
+    // 공식 측정 시작 전(warm-up 대기)에는 dB를 전송하지 않음 — 상대에게 warm-up 노이즈 전파 방지
+    if (!officialMeasuring) return;
     // 매 tick마다 이 윈도우의 peak 갱신 (전송 여부와 무관)
     emitWindowPeak.current = Math.max(emitWindowPeak.current, mic.db);
 
@@ -152,7 +255,7 @@ export default function GameScreen({ navigation, route }: Props) {
     const peakToSend = emitWindowPeak.current;
     emitWindowPeak.current = 0;
     sendRoundDb(round, Number(peakToSend.toFixed(2)));
-  }, [mic.db, phase.type, round, sendRoundDb]);
+  }, [mic.db, phase.type, officialMeasuring, round, sendRoundDb]);
 
   useEffect(() => {
     if (phase.type !== 'roundResult' || resultNextIn <= 0) return;
@@ -175,6 +278,29 @@ export default function GameScreen({ navigation, route }: Props) {
       forfeit: finalResult.forfeit,
     });
   }, [finalResult, navigation]);
+
+  // 상대방이 명시적으로 나감 (countdown/preparing 등 공식 라운드 이전) → WaitingRoom 이탈 UI로
+  useEffect(() => {
+    if (!opponentLeft) return;
+    micController.cleanup();
+    setMicWarmReady(false);
+    navigation.replace('WaitingRoom', { roomCode: storeRoomCode ?? '' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opponentLeft]);
+
+  // match:prepare-failed 수신 시 GameScreen → MatchFound 복귀
+  useEffect(() => {
+    if (!matchPrepareFailed) return;
+    // mic 정리
+    micController.cleanup();
+    setMicWarmReady(false);
+    // store 상태 초기화
+    clearMatchPrepareFailed();
+    // MatchFound로 replace (뒤로가기 시 Game으로 돌아오지 않도록)
+    Toast.info(matchPrepareFailedMessage ?? '마이크 준비 실패로 대결 시작이 취소되었습니다.');
+    navigation.replace('MatchFound');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchPrepareFailed]);
 
   // 상대방 연결 끊김 카운트다운
   useEffect(() => {
@@ -220,6 +346,9 @@ export default function GameScreen({ navigation, route }: Props) {
         )}
         <GameHeader round={round} myScore={myScore} oppScore={oppScore} isGolden={isGolden} total={TOTAL_ROUNDS} />
         {phase.type === 'countdown' && <CountdownPhase n={phase.n} isGolden={isGolden} />}
+        {phase.type === 'preparing' && (
+          <PreparingPhase micReady={micWarmReady} opponentReady={opponentMicReady} />
+        )}
         {phase.type === 'measuring' && (
           <MeasuringPhase
             userName={user.name || '나'}
@@ -227,10 +356,11 @@ export default function GameScreen({ navigation, route }: Props) {
             userImage={user.profileImageUrl}
             opponent={opponent}
             myDb={myLiveDb}
-            myPeak={mic.peak}
+            myPeak={myLivePeak}
             oppDb={oppLiveDb}
             oppPeak={oppPeak}
             timeLeft={phase.timeLeft}
+            roundSeconds={roundSeconds}
             pulse={pulse}
           />
         )}
@@ -262,6 +392,29 @@ function CountdownPhase({ n, isGolden }: { n: number; isGolden: boolean }) {
   );
 }
 
+function PreparingPhase({ micReady, opponentReady }: { micReady: boolean; opponentReady: boolean }) {
+  const label = !micReady
+    ? '마이크 준비 중...'
+    : !opponentReady
+      ? '준비 완료 · 상대를 기다리는 중...'
+      : '곧 시작합니다';
+  const color = micReady ? C.lime : C.cyan;
+
+  return (
+    <View style={styles.countdownWrap}>
+      <View style={[styles.radialGlow, { backgroundColor: `${color}26` }]} />
+      <Text style={styles.countLabel}>{label}</Text>
+      <View style={styles.prepareDots}>
+        <View style={[styles.prepareDot, { backgroundColor: micReady ? C.lime : `${C.lime}33` }]} />
+        <View style={[styles.prepareDot, { backgroundColor: opponentReady ? C.lime : `${C.lime}33` }]} />
+      </View>
+      <View style={styles.micChip}>
+        <Text style={styles.micChipText}>{micReady ? 'MIC READY' : 'WARMING UP'}</Text>
+      </View>
+    </View>
+  );
+}
+
 function MeasuringPhase({
   userName,
   userAvatarColor,
@@ -272,6 +425,7 @@ function MeasuringPhase({
   oppDb,
   oppPeak,
   timeLeft,
+  roundSeconds,
   pulse,
 }: {
   userName: string;
@@ -283,11 +437,12 @@ function MeasuringPhase({
   oppDb: number;
   oppPeak: number;
   timeLeft: number;
+  roundSeconds: number;
   pulse: Animated.Value;
 }) {
   const diff = myDb - oppDb;
   const leading = diff >= 0;
-  const timerPct = Math.max(0, Math.min(1, timeLeft / ROUND_SECONDS));
+  const timerPct = Math.max(0, Math.min(1, timeLeft / roundSeconds));
   const timerColor = timeLeft <= 1.5 ? C.yellow : C.pink;
 
   return (
@@ -494,6 +649,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: `${C.lime}66`,
     backgroundColor: `${C.lime}14`,
+  },
+  prepareDots: {
+    flexDirection: 'row',
+    gap: S[2],
+    marginTop: S[4],
+  },
+  prepareDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
   },
   micChipText: {
     fontFamily: FONTS.monoBold,
