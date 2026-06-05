@@ -17,6 +17,7 @@ import appJson from '../../../app.json';
 import { Av, Row } from '../../components/ui';
 import { C, FONTS, FS, R, S } from '../../theme';
 import { useAppStore } from '../../store';
+import { useGameStore } from '../../store/gameStore';
 import {
   deleteAccount,
   logoutFromServer,
@@ -33,7 +34,6 @@ type Props = NativeStackScreenProps<ProfileStackParamList, 'Settings'>;
 
 const SOUND_KEY = 'deci_settings_sound_enabled';
 const HAPTIC_KEY = 'deci_settings_haptic_enabled';
-const DELETE_CONFIRM_TEXT = '정말 삭제';
 const SWATCHES = [C.pink, C.cyan, C.yellow, C.lime, C.purple];
 
 export default function SettingsScreen({ navigation }: Props) {
@@ -41,6 +41,7 @@ export default function SettingsScreen({ navigation }: Props) {
   const user = useAppStore((s) => s.user);
   const avatarColor = useAppStore((s) => s.avatarColor);
   const logout = useAppStore((s) => s.logout);
+  const disconnectSocket = useGameStore((s) => s.disconnectSocket);
   const setNickname = useAppStore((s) => s.setNickname);
   const setAvatarColor = useAppStore((s) => s.setAvatarColor);
   const setProfileImageUrl = useAppStore((s) => s.setProfileImageUrl);
@@ -49,7 +50,7 @@ export default function SettingsScreen({ navigation }: Props) {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [hapticEnabled, setHapticEnabled] = useState(true);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isSavingNickname, setIsSavingNickname] = useState(false);
   const [isSavingColor, setIsSavingColor] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -149,6 +150,8 @@ export default function SettingsScreen({ navigation }: Props) {
         text: '로그아웃',
         style: 'destructive',
         onPress: async () => {
+          // 게임 소켓이 연결 중이면 먼저 정리한다.
+          disconnectSocket();
           try {
             await logoutFromServer();
           } catch {
@@ -162,19 +165,36 @@ export default function SettingsScreen({ navigation }: Props) {
     ]);
   };
 
+  const handleDeleteConfirm = () => {
+    setDeleteModalVisible(false);
+    Alert.alert(
+      '마지막 확인',
+      '정말로 탈퇴하시겠습니까?\n모든 데이터가 즉시 영구 삭제되며 복구할 수 없습니다.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '네, 탈퇴합니다',
+          style: 'destructive',
+          onPress: handleDeleteAccount,
+        },
+      ],
+    );
+  };
+
   const handleDeleteAccount = async () => {
+    if (isDeleting) return;
+    setIsDeleting(true);
     try {
+      disconnectSocket();
       await deleteAccount();
       await clearTokens();
       logout();
-      setDeleteModalVisible(false);
-      setDeleteConfirm('');
     } catch (e) {
       Toast.error(getErrorMessage(e));
+    } finally {
+      setIsDeleting(false);
     }
   };
-
-  const deleteEnabled = deleteConfirm === DELETE_CONFIRM_TEXT;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -256,13 +276,13 @@ export default function SettingsScreen({ navigation }: Props) {
           <SettingsRow
             label="이용약관"
             onPress={() => {
-              // TODO: 이용약관 URL 연결.
+              // TODO: 관리자 웹의 이용약관 페이지가 준비되면 연결한다.
             }}
           />
           <SettingsRow
             label="개인정보처리방침"
             onPress={() => {
-              // TODO: 개인정보처리방침 URL 연결.
+              // TODO: 관리자 웹의 개인정보처리방침 페이지가 준비되면 연결한다.
             }}
             isLast
           />
@@ -282,32 +302,24 @@ export default function SettingsScreen({ navigation }: Props) {
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
+            <Text style={styles.modalWarningIcon}>⚠</Text>
             <Text style={styles.modalTitle}>회원 탈퇴</Text>
+            <Text style={styles.modalWarning}>이 작업은 되돌릴 수 없습니다.</Text>
             <Text style={styles.modalBody}>
-              계정과 기록이 삭제됩니다. 계속하려면 아래에 ‘정말 삭제’를 입력해 주세요.
+              탈퇴 즉시 모든 데이터가 영구 삭제됩니다.{'\n'}계속하시겠습니까?
             </Text>
-            <TextInput
-              value={deleteConfirm}
-              onChangeText={setDeleteConfirm}
-              placeholder={DELETE_CONFIRM_TEXT}
-              placeholderTextColor={C.textMute}
-              style={styles.deleteInput}
-            />
             <Row style={styles.modalActions}>
               <Pressable
-                onPress={() => {
-                  setDeleteModalVisible(false);
-                  setDeleteConfirm('');
-                }}
+                onPress={() => setDeleteModalVisible(false)}
                 style={[styles.modalBtn, styles.cancelModalBtn]}
               >
                 <Text style={styles.cancelModalText}>취소</Text>
               </Pressable>
               <Pressable
-                onPress={deleteEnabled ? handleDeleteAccount : undefined}
-                style={[styles.modalBtn, styles.deleteModalBtn, !deleteEnabled && styles.disabledBtn]}
+                onPress={handleDeleteConfirm}
+                style={[styles.modalBtn, styles.deleteModalBtn]}
               >
-                <Text style={styles.deleteModalText}>탈퇴</Text>
+                <Text style={styles.deleteModalText}>계속</Text>
               </Pressable>
             </Row>
           </View>
@@ -572,23 +584,25 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.headBold,
     fontSize: FS.xl,
     color: C.pink,
+    textAlign: 'center',
+  },
+  modalWarningIcon: {
+    fontSize: 32,
+    textAlign: 'center',
+    color: '#ff3b30',
+  },
+  modalWarning: {
+    fontFamily: FONTS.headBold,
+    fontSize: FS.md,
+    color: C.pink,
+    textAlign: 'center',
   },
   modalBody: {
     fontFamily: FONTS.body,
     fontSize: FS.sm,
     lineHeight: 21,
     color: C.textDim,
-  },
-  deleteInput: {
-    minHeight: 48,
-    borderRadius: R.md,
-    borderWidth: 1,
-    borderColor: C.line,
-    backgroundColor: C.bg,
-    paddingHorizontal: S[3],
-    fontFamily: FONTS.bodySemibold,
-    fontSize: FS.md,
-    color: C.text,
+    textAlign: 'center',
   },
   modalActions: {
     gap: S[2],

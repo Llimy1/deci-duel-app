@@ -41,7 +41,7 @@ interface AppState {
   accessToken: string | null;
   refreshToken: string | null;
   userId: number | null;
-  pendingDevCredentials: { devId: string; devPw: string } | null;
+  pendingOAuthSignup: { provider: 'apple' | 'google' | 'kakao'; signupToken: string } | null;
   setLastResult: (r: MatchResult) => void;
   updateBestDb: (db: number) => void;
   startMatch: (opponent: Opponent) => void;
@@ -54,8 +54,8 @@ interface AppState {
   setNickname: (nickname: string) => void;
   setAvatarColor: (avatarColor: string) => void;
   setProfileImageUrl: (profileImageUrl: string | null) => void;
-  setPendingDevCredentials: (devId: string, devPw: string) => void;
-  clearPendingDevCredentials: () => void;
+  setPendingOAuthSignup: (provider: 'apple' | 'google' | 'kakao', signupToken: string) => void;
+  clearPendingOAuthSignup: () => void;
   logout: () => void;
 }
 
@@ -81,7 +81,7 @@ export const useAppStore = create<AppState>((set) => ({
   accessToken: null,
   refreshToken: null,
   userId: null,
-  pendingDevCredentials: null,
+  pendingOAuthSignup: null,
   setLastResult: (r) => set({ lastResult: r }),
   startMatch: (opponent) =>
     set({ currentMatch: { opponent, round: 1, meScore: 0, oppScore: 0 } }),
@@ -157,10 +157,10 @@ export const useAppStore = create<AppState>((set) => ({
     set((s) => ({
       user: { ...s.user, profileImageUrl },
     })),
-  setPendingDevCredentials: (devId, devPw) =>
-    set({ pendingDevCredentials: { devId, devPw } }),
-  clearPendingDevCredentials: () =>
-    set({ pendingDevCredentials: null }),
+  setPendingOAuthSignup: (provider, signupToken) =>
+    set({ pendingOAuthSignup: { provider, signupToken } }),
+  clearPendingOAuthSignup: () =>
+    set({ pendingOAuthSignup: null }),
   logout: () =>
     set({
       isLoggedIn: false,
@@ -171,5 +171,7 @@ export const useAppStore = create<AppState>((set) => ({
       userId: null,
       user: emptyUser,
       currentMatch: null,
+      lastResult: null,
+      pendingOAuthSignup: null,
     }),
 }));

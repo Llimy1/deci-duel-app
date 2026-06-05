@@ -1,10 +1,10 @@
 # DeciDuel App 진행 상황
 
 ## 마지막 업데이트
-2026-06-05
+2026-06-06
 
 ## 현재 상태
-스플래시 애니메이션 구현 완료 (D 마크 → DECI DUEL 워드마크 5.4s 시퀀스). iOS 빌드 문제 해결 (buildReactNativeFromSource). 앱 104개 테스트 pass. Phase B 진행 중.
+서버사이드 OAuth 전환 완료 (Kakao/Google). Apple은 expo-apple-authentication 네이티브 방식. Android 에뮬레이터 테스트 환경 구성 완료 (adb reverse tcp:3000 tcp:3000). LeaderboardScreen myRankNum 두 자리 이상 줄바꿈 버그 수정. OAuth E2E QA 진행 중 (Kakao/Google 개발자 콘솔 redirect URI 등록 필요). Phase B(효과음/햅틱, 딥링크, i18n)는 OAuth QA 이후 진행한다.
 
 ## 완료된 작업
 
@@ -273,8 +273,127 @@
 - Podfile이 `RCT_USE_PREBUILT_RNCORE` 세팅을 해제 → React Native를 xcframework 대신 소스에서 직접 컴파일
 - `FRAMEWORK_SEARCH_PATHS`에서 `React-Core-prebuilt` 항목 제거 확인
 
+## 정리된 작업 (2026-06-05 — OAuth 전 선행 작업 재검토)
+
+### 1. 폰트 전체 통일
+- 전체 23개 화면 파일 스캔 결과: fontFamily 누락 없음 ✅ (이미 완료 상태)
+
+### 2. 화면 간 톤/분위기 일관성 QA
+- Login/Home/Game 화면 시뮬레이터 확인: 다크 네온 (#0a0612) 일관 유지 ✅
+- BowlbyOne 워드마크, EQ 파형 시각 요소, 소셜 버튼 계층 모두 톤 일치
+- **의도적 유지**: 온보딩 화면은 게임 화면보다 약간 밝은 채도 → 신규 사용자 접근성 고려
+
+### 3. 다이어리 이모지 다양화
+- 사용자 결정에 따라 기존 7개 MOODS로 복구
+- 이모지/비주얼 다양화는 Phase B에서 별도 UX 방향을 잡은 뒤 진행
+
+### 4. 법적 문서/웹 페이지
+- 임시 `docs/legal/terms.md`, `docs/legal/privacy.md` 초안은 삭제
+- 약관/개인정보 페이지는 나중에 관리자 웹을 별도로 만든 뒤 연결
+
+### 5. SettingsScreen 약관/개인정보 링크 연결
+- GitHub 문서 임시 링크는 해제
+- 관리자 웹 URL이 확정되면 SettingsScreen의 이용약관/개인정보처리방침 row에 연결
+
+### 6. 앱 버전 표시
+- SettingsScreen에 이미 구현됨 (`appJson.expo.version`) ✅
+
+### 7. 로그아웃/회원탈퇴 QA + 버그 수정
+- **버그 수정**: `store/index.ts` logout()에 `lastResult: null` 추가 (미초기화 버그)
+- **버그 수정**: `SettingsScreen` handleLogout/handleDeleteAccount에 `disconnectSocket()` 추가
+  - 게임 소켓 연결 중 로그아웃 시 소켓이 잔존하는 문제 해결
+- `src/store/gameStore.ts` disconnectSocket() import해 logout 전 호출 보장
+
+### 8. 마이크 권한 사전 안내 최종 점검
+- Phase A에서 구현된 MicTestScreen + requireMicPermission() 유틸 확인 ✅
+- DuelLobby/SoloMeasure 진입 전 권한 체크 정상 작동 확인 ✅
+- "권한 없음" vs "열기 실패" UX 분기 gameMicController에서 처리 ✅
+
+### 검증
+- `npx tsc --noEmit`: 통과 ✅
+- `npm test`: 104/104 ✅
+- 시뮬레이터 (iPhone 16 Pro): 스플래시 → 로그인 화면 진입 확인 ✅
+
+### OAuth 진행 원칙
+- OAuth는 바로 구현하지 않고 먼저 설계 논의 후 진행
+- 설계에서 확정할 것: Apple/Google/Kakao provider별 앱 플로우, 서버 callback/token 교환 방식, 기존 dev 계정과 사용자 병합 정책, 약관/마이크 권한 플로우 삽입 위치, 테스트 계정/QA 시나리오
+- Phase B(효과음/햅틱, 딥링크, i18n)는 OAuth 설계/구현 이후 진행
+
+## 완료된 작업 (2026-06-05 — 네이티브 스플래시 수정 + 로그아웃 버그 수정)
+
+### 네이티브 스플래시 (LaunchScreen)
+- **문제**: `expo prebuild --clean`이 `SplashScreenLegacy.imageset`에 구버전 1024×1024 아이콘 이미지를 생성, 앱 첫 실행 시 이상하게 늘어진 화면 노출
+- **수정 1**: `app.json`의 `splash.image` / `resizeMode` 제거 → 네이티브 스플래시가 이미지 없이 `#0a0612` 단색 배경만 사용
+- **수정 2**: 로컬 iOS `SplashScreen.storyboard`의 `SplashScreenLegacy` imageView/resource 참조 제거
+- **수정 3**: 시뮬레이터 LaunchScreen 스냅샷 캐시 삭제 (`~/Library/Developer/CoreSimulator/.../Snapshots/com.anonymous.deciduelapp`)
+- 재빌드 후 확인: 네이티브 스플래시 = 순수 어두운 배경(#0a0612) → SplashAnimation(D→DECI DUEL) 자연스럽게 이어짐
+
+### Zustand 로그아웃 버그 수정
+- `store/index.ts` `logout()` 에 `lastResult: null` 누락 → 재로그인 시 이전 게임 결과 잔존 문제 수정
+- `SettingsScreen.tsx` `handleLogout()` / `handleDeleteAccount()` 에 `disconnectSocket()` 추가 → 게임 소켓 연결 중 로그아웃 시 소켓 잔존 방지
+
+## 완료된 작업 (2026-06-05 — OAuth 전체 구현 + 회원탈퇴 개선)
+
+### 회원탈퇴 개선
+- **코드 수준 삭제 순서**: R2 profileImage → DiaryRecord.deleteMany → SoloRecord.deleteMany → User.delete
+- **서버**: `user.repository.ts` `findProfileImageKey / deleteDiaryRecords / deleteSoloRecord` 추가
+- **서버**: `user.service.ts` `deleteMe()` 4단계 순서 구현 (cascade 없이 코드 수준)
+- **앱**: SettingsScreen 회원탈퇴 모달 텍스트 전체 중앙정렬 + ⚠ 이모지 `color: '#ff3b30'` 적용
+
+### DB 마이그레이션 (데이터 보존)
+- `prisma migrate dev` 대신 `prisma db execute --file`로 SQL 직접 실행 (22명 사용자 데이터 보존)
+- `auth_provider` / `provider_id` 컬럼 추가, `dev_id` / `dev_password` 삭제
+- `@@unique([authProvider, providerId])` 복합 유니크 제약 추가
+- `prisma generate` 재실행 → `authProvider_providerId` composite key 생성
+
+### 서버 OAuth 구현
+- `jose` 라이브러리 기반 Apple/Google JWKS 검증, Kakao REST API 호출
+- `POST /auth/oauth`: provider 토큰 검증 → 기존 유저: AuthTokenData / 신규 유저: signupToken(15min JWT)
+- `POST /auth/oauth/signup`: signupToken 검증 → nickname/terms로 User 생성 + 토큰 발급
+- `auth.controller.spec.ts` 전면 재작성 (13개 테스트) — `jest.mock('jose')` 호이스팅으로 ESM 문제 해결
+- 서버 전체 테스트 **130/130** pass
+
+### 앱 OAuth 구현
+- `expo-apple-authentication`, `expo-auth-session`, `expo-web-browser` 설치
+- `src/api/oauth.ts` 신규: `oauthLogin()` / `completeOAuthSignup()`
+- `src/api/auth.ts`: devLogin/devSignup 제거, refreshTokens만 유지
+- `src/store/index.ts`: `pendingDevCredentials` → `pendingOAuthSignup: { provider, signupToken } | null`
+- `LoginScreen.tsx` 전면 재작성: Apple/Google/Kakao 소셜 로그인 버튼, provider별 loading 상태
+- `PhotoScreen.tsx`: `pendingDevCredentials` → `pendingOAuthSignup`, `devSignup` → `completeOAuthSignup`
+- `AuthNavigator.tsx` + `navigation/types.ts`: `DevSignup` 라우트 제거
+- `DevSignupScreen.tsx` 삭제
+- `auth.test.ts` 재작성: `oauthLogin` / `completeOAuthSignup` 테스트 8개
+- 앱 전체 테스트 **103/103** pass (`npx tsc --noEmit` 통과)
+- `.env`: OAuth 키 플레이스홀더 추가 (`EXPO_PUBLIC_GOOGLE_*`, `EXPO_PUBLIC_KAKAO_REST_API_KEY`)
+
+### 미완료 (QA 필요)
+- OAuth 클라이언트 ID / Kakao REST API 키 `.env`에 실제 값 입력 필요
+- 실기기/시뮬레이터에서 Apple/Google/Kakao 로그인 E2E 테스트 필요
+- 서버 재시작 (`npm run start:dev`)
+
+## 완료된 작업 (2026-06-06 — 서버사이드 OAuth 전환 + UI 버그 수정)
+
+### 서버사이드 OAuth (Kakao/Google)
+- **설계**: Expo Go에서 앱사이드 OAuth 불가 → 서버가 Authorization Code Flow 처리
+- **서버 `auth.service.ts`**: `pendingStates` / `pendingAuthCodes` Map 추가, `kakaoInitUrl` / `kakaoCallback` / `googleInitUrl` / `googleCallback` / `exchangeAuthCode` / `processOAuthUser` / `createOAuthState` / `consumeOAuthState` / `buildAuthCodeRedirect` 구현
+  - State token CSRF 보호 (5분 TTL), auth code 1분 TTL, `ALLOWED_REDIRECT_SCHEMES` 검증
+- **서버 `auth.controller.ts`**: `GET /auth/oauth/kakao/init` / `GET /auth/oauth/kakao/callback` / `GET /auth/oauth/google/init` / `GET /auth/oauth/google/callback` / `POST /auth/oauth/exchange` 추가
+- **서버 `auth.request.ts`**: `ExchangeAuthCodeRequest { code: string }` 추가
+- **앱 `api/oauth.ts`**: `exchangeAuthCode(code)` 함수 추가
+- **앱 `LoginScreen.tsx`**: `expo-auth-session` 제거, `WebBrowser.openAuthSessionAsync` + `Linking.createURL('oauth/callback')` 패턴으로 handleKakao/handleGoogle 재구현. Apple은 `expo-apple-authentication` 네이티브 방식 유지
+
+### Android 에뮬레이터 개발 환경
+- `adb reverse tcp:3000 tcp:3000` — 에뮬레이터 `localhost:3000` → Mac `localhost:3000` 포워딩 (에뮬레이터 재부팅 시 재실행 필요)
+- 에뮬레이터에서 `localhost` = 에뮬레이터 자신, Mac 접근은 `10.0.2.2` 또는 adb reverse 사용
+
+### LeaderboardScreen 버그 수정
+- `myRankNum` style `width: 52` → `minWidth: 52` + `numberOfLines={1}` 추가
+- 두 자리 이상 순위(`#10`, `#100`)에서 줄바꿈 발생하던 문제 해결
+
 ## 진행 중인 작업
-- Phase B 앱 완성도
+- OAuth E2E QA: Kakao/Google 개발자 콘솔에 `http://localhost:3000/auth/oauth/kakao(google)/callback` 등록 후 실기기/에뮬레이터 테스트
+- Apple Sign In: 개발 빌드(`npx expo run:ios`) 환경에서 테스트 필요
+- Phase B 앱 완성도(효과음/햅틱, 딥링크, i18n)는 OAuth QA 이후 진행
 
 ## 출시 전 작업 로드맵
 
@@ -282,9 +401,9 @@
 - [ ] i18n 다국어 지원 (한국어/영어)
   - `i18next` + `react-i18next` + `expo-localization`
   - 기기 언어 자동 감지 + 설정에서 수동 변경
-- [ ] 폰트 전체 통일 (시스템 폰트 혼용 제거)
-- [ ] 화면 간 톤/분위기 일관성 정리
-- [ ] 이모지 다양화 (다이어리 바텀시트 등)
+- [x] 폰트 전체 통일 (전체 23개 화면 스캔 완료 — fontFamily 누락 없음)
+- [x] 화면 간 톤/분위기 일관성 정리 (다크 네온 #0a0612 전체 일관 확인)
+- [ ] 이모지/비주얼 다양화 — 기존 7개 MOODS 유지, Phase B에서 별도 진행
 - [ ] 효과음 (카운트다운 3-2-1, 라운드 승/패)
   - 배경음악은 dB 측정에 영향 → 미포함 결정
 - [ ] 햅틱 (카운트다운, 게임 시작, 라운드 결과)
@@ -292,14 +411,14 @@
 - [x] 오프라인/네트워크 에러 처리
 
 ### Phase C — 법적/배포 준비
-- [ ] 개인정보처리방침 / 이용약관 페이지 (웹)
-- [ ] SettingsScreen 약관/개인정보 링크 연결
-- [ ] 버전 표시 (app.json 연동)
-- [ ] 로그아웃/회원탈퇴 QA
+- [ ] 개인정보처리방침 / 이용약관 페이지 (관리자 웹에서 별도 구현 후 연결)
+- [ ] SettingsScreen 약관/개인정보 링크 연결 (관리자 웹 URL 확정 후 연결)
+- [x] 버전 표시 (Constants.expoConfig.version 연동)
+- [x] 로그아웃/회원탈퇴 QA (lastResult null 버그 수정, disconnectSocket 추가)
 - [x] 앱 아이콘 & 스플래시 실제 디자인 교체
 
 ### Phase D — 배포
-- [ ] OAuth 구현 (Apple 필수 + Google + 카카오)
+- [ ] OAuth 설계 논의 후 구현 (Apple 필수 + Google + 카카오)
   - EAS/TestFlight 단계까지는 개발자 로그인 유지
 - [ ] Google AdMob 연동
   - 배너: 홈, 리더보드, 프로필
@@ -366,3 +485,11 @@
 | 2026-06-05 | `ios.buildReactNativeFromSource: true` | Expo SDK 54 + RN 0.81 New Arch에서 prebuilt xcframework 링크 오류. `[CP] Copy XCFrameworks` 빌드 페이즈가 링크 전에 미실행. 소스 빌드 전환으로 해결 |
 | 2026-06-05 | SplashAnimation useNativeDriver 분리 | SVG y/height 애니메이션은 `useNativeDriver: false` 필수 (Layout 속성). opacity/transform은 `true`. AnimatedRect = Animated.createAnimatedComponent(Rect) |
 | 2026-06-05 | EQ 바 transform-origin center 에뮬레이션 | CSS `transform-origin: center`를 RN에서 재현: cy = y + h/2 계산 후 y/height 양쪽 interpolate. scaleY 대신 절대값 사용 |
+| 2026-06-05 | 회원탈퇴 cascade 없이 코드 수준 삭제 | DB cascade는 실수로 delete 시 복구 불가. 코드에서 순서 명시 → 각 단계 에러 캐치 가능 |
+| 2026-06-05 | OAuth signupToken = 15분 만료 JWT (DB 저장 안함) | Redis 없는 환경에서 stateless 유효성 검증. 만료 후 재로그인 유도 |
+| 2026-06-05 | Kakao accessToken → REST API로 providerId 추출 | Kakao는 JWKS 없음. `/v2/user/me` bearer 호출로 `id` 필드 추출 |
+| 2026-06-05 | jest.mock('jose') 호이스팅으로 ESM 문제 해결 | jose v6은 pure ESM. ts-jest CJS 환경에서 import 오류. transformIgnorePatterns 대신 mock 호이스팅이 더 단순 |
+| 2026-06-05 | prisma db execute (SQL 직접) vs migrate dev | 22명 기존 데이터 보존. nullable column 추가 → UPDATE → NOT NULL 단계 진행. prisma migrate는 non-nullable 추가 시 기존 데이터 거부 |
+| 2026-06-06 | 서버사이드 OAuth Authorization Code Flow | Expo Go에서 앱사이드 Kakao/Google OAuth 불가 (커스텀 스킴 미지원). 서버가 OAuth 처리 후 앱 deep link로 auth code 전달 |
+| 2026-06-06 | Apple은 expo-apple-authentication 네이티브 유지 | Expo Go에서 Apple 웹 OAuth 불가, expo-apple-authentication은 개발 빌드(npx expo run:ios)에서 동작 |
+| 2026-06-06 | adb reverse tcp:3000 tcp:3000 | Android 에뮬레이터에서 localhost = 에뮬레이터 자신. IP 변경 없이 Mac 서버 접근. Google 콘솔에 IP 주소 등록 불가 문제도 해결 |

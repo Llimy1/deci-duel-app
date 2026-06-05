@@ -1,20 +1,34 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   ScrollView,
   Pressable,
-  TextInput,
   StyleSheet,
   Platform,
-  KeyboardAvoidingView,
   useWindowDimensions,
-  Alert,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FontAwesome5 } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
+import { C, FONTS, FS, S, R } from '../../theme';
+import { useAppStore } from '../../store';
+import { oauthLogin, exchangeAuthCode, type OAuthLoginResponse } from '../../api/oauth';
+import { fetchMe } from '../../api/me';
+import { saveTokens } from '../../utils/secureStorage';
+import { Toast } from '../../utils/toast';
+import { getErrorMessage } from '../../utils/errorHandler';
+import type { AuthStackParamList } from '../../navigation/types';
+
+WebBrowser.maybeCompleteAuthSession();
+
+type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
+
+const NUM_COLS = 28;
 
 function GoogleIcon() {
   return (
@@ -26,16 +40,6 @@ function GoogleIcon() {
     </Svg>
   );
 }
-import { C, FONTS, FS, S, R } from '../../theme';
-import { useAppStore } from '../../store';
-import { devLogin } from '../../api/auth';
-import { fetchMe } from '../../api/me';
-import { saveTokens } from '../../utils/secureStorage';
-import type { AuthStackParamList } from '../../navigation/types';
-
-type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
-
-const NUM_COLS = 28;
 
 function MiniWave({ tick }: { tick: number }) {
   return (
@@ -67,166 +71,187 @@ function MiniWave({ tick }: { tick: number }) {
 
 export default function LoginScreen({ navigation }: Props) {
   const [tick, setTick] = useState(0);
-  const [devId, setDevId] = useState('');
-  const [devPw, setDevPw] = useState('');
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [loginError, setLoginError] = useState('');
+  const [loading, setLoading] = useState<'apple' | 'google' | 'kakao' | null>(null);
   const { height, width } = useWindowDimensions();
   const setAuth = useAppStore((s) => s.setAuth);
   const setTokens = useAppStore((s) => s.setTokens);
   const setMe = useAppStore((s) => s.setMe);
+  const setPendingOAuthSignup = useAppStore((s) => s.setPendingOAuthSignup);
   const compact = height < 740;
   const narrow = width < 380;
+  const isIOS = Platform.OS === 'ios';
 
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 80);
     return () => clearInterval(id);
   }, []);
 
-  const handleSocial = () => {
-    Alert.alert(
-      '준비 중',
-      '소셜 로그인은 준비 중입니다.\n개발자 로그인을 이용해 주세요.',
-      [{ text: '확인' }]
-    );
-  };
-
-  const handleDevLogin = async () => {
-    if (devId.length < 2 || isLoggingIn) return;
-    setIsLoggingIn(true);
-    setLoginError('');
-    try {
-      const result = await devLogin(devId, devPw);
+  const handleOAuthResult = async (result: OAuthLoginResponse) => {
+    if (!result.isNewUser) {
       await saveTokens(result.accessToken, result.refreshToken);
       setTokens(result.accessToken, result.refreshToken, result.user.id);
       setAuth(result.user.nickname, C.pink);
       fetchMe().then(setMe).catch(() => {});
-    } catch (e: any) {
-      setLoginError(e.message ?? '로그인에 실패했습니다');
-    } finally {
-      setIsLoggingIn(false);
+    } else {
+      setPendingOAuthSignup(result.provider, result.signupToken);
+      navigation.navigate('Nickname');
     }
   };
 
-  const handleDevSignup = () => {
-    navigation.navigate('DevSignup');
+  const handleApple = async () => {
+    if (loading) return;
+    setLoading('apple');
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [AppleAuthentication.AppleAuthenticationScope.FULL_NAME],
+      });
+      if (!credential.identityToken) throw new Error('Apple identityToken 없음');
+      const result = await oauthLogin('apple', { idToken: credential.identityToken });
+      await handleOAuthResult(result);
+    } catch (e: any) {
+      if (e.code !== 'ERR_REQUEST_CANCELED') {
+        Toast.error(getErrorMessage(e));
+      }
+    } finally {
+      setLoading(null);
+    }
   };
 
-  const SocialBtn = ({
-    label,
-    bg,
-    textColor,
-    onPress,
-    icon,
-  }: {
-    label: string;
-    bg: string;
-    textColor: string;
-    onPress: () => void;
-    icon?: React.ReactNode;
-  }) => (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.socialBtn, { backgroundColor: bg, opacity: pressed ? 0.85 : 1 }]}
-    >
-      {icon && <View style={styles.socialBtnIcon}>{icon}</View>}
-      <Text style={[styles.socialBtnText, { color: textColor }]}>{label}</Text>
-    </Pressable>
-  );
+  const handleGoogle = async () => {
+    if (loading) return;
+    setLoading('google');
+    try {
+      const appRedirectUri = Linking.createURL('oauth/callback');
+      const initUrl =
+        `${process.env.EXPO_PUBLIC_API_BASE_URL}/auth/oauth/google/init` +
+        `?redirectUri=${encodeURIComponent(appRedirectUri)}`;
 
-  const isIOS = Platform.OS === 'ios';
+      const authResult = await WebBrowser.openAuthSessionAsync(initUrl, appRedirectUri);
+      if (authResult.type !== 'success') return;
+
+      const parsed = Linking.parse(authResult.url);
+      const code = parsed.queryParams?.code as string | undefined;
+      const error = parsed.queryParams?.error as string | undefined;
+
+      if (error || !code) throw new Error('Google 로그인에 실패했습니다.');
+
+      const result = await exchangeAuthCode(code);
+      await handleOAuthResult(result);
+    } catch (e: any) {
+      Toast.error(getErrorMessage(e));
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const handleKakao = async () => {
+    if (loading) return;
+    setLoading('kakao');
+    try {
+      const appRedirectUri = Linking.createURL('oauth/callback');
+      const initUrl =
+        `${process.env.EXPO_PUBLIC_API_BASE_URL}/auth/oauth/kakao/init` +
+        `?redirectUri=${encodeURIComponent(appRedirectUri)}`;
+
+      const authResult = await WebBrowser.openAuthSessionAsync(initUrl, appRedirectUri);
+      if (authResult.type !== 'success') return;
+
+      const parsed = Linking.parse(authResult.url);
+      const code = parsed.queryParams?.code as string | undefined;
+      const error = parsed.queryParams?.error as string | undefined;
+
+      if (error || !code) throw new Error('카카오 로그인에 실패했습니다.');
+
+      const result = await exchangeAuthCode(code);
+      await handleOAuthResult(result);
+    } catch (e: any) {
+      Toast.error(getErrorMessage(e));
+    } finally {
+      setLoading(null);
+    }
+  };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <SafeAreaView style={styles.container}>
-        <ScrollView
-          contentContainerStyle={[styles.scroll, { minHeight: height }]}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          <MiniWave tick={tick} />
+    <SafeAreaView style={styles.container}>
+      <ScrollView
+        contentContainerStyle={[styles.scroll, { minHeight: height }]}
+        showsVerticalScrollIndicator={false}
+      >
+        <MiniWave tick={tick} />
 
-          <View style={[styles.wordmarkWrap, compact && styles.wordmarkWrapCompact]}>
-            <Text style={[styles.wordmark, narrow && styles.wordmarkNarrow]}>
-              {'DECI\nDUEL'}
-            </Text>
-            <Text style={styles.tagline}>데시벨로 겨루는 1:1 게임</Text>
-          </View>
+        <View style={[styles.wordmarkWrap, compact && styles.wordmarkWrapCompact]}>
+          <Text style={[styles.wordmark, narrow && styles.wordmarkNarrow]}>
+            {'DECI\nDUEL'}
+          </Text>
+          <Text style={styles.tagline}>데시벨로 겨루는 1:1 게임</Text>
+        </View>
 
-          <View style={styles.card}>
-            <Text style={styles.cardLabel}>계정 연결</Text>
+        <View style={styles.card}>
+          <Text style={styles.cardLabel}>계정 연결</Text>
 
-            <View style={styles.socialStack}>
-              {isIOS && (
-                <SocialBtn label="Apple로 계속하기" bg="#000" textColor="#fff" onPress={handleSocial}
-                  icon={<FontAwesome5 name="apple" size={20} color="#fff" />} />
-              )}
-              <SocialBtn label="카카오로 계속하기" bg="#FEE500" textColor="#191600" onPress={handleSocial}
-                icon={<FontAwesome5 name="comment" size={19} color="#191600" solid />} />
-              {!isIOS && (
-                <SocialBtn label="Google로 계속하기" bg="#fff" textColor="#202124" onPress={handleSocial}
-                  icon={<GoogleIcon />} />
-              )}
-              {isIOS && (
-                <SocialBtn label="Google로 계속하기" bg="#fff" textColor="#202124" onPress={handleSocial}
-                  icon={<GoogleIcon />} />
-              )}
-            </View>
+          <View style={styles.socialStack}>
+            {isIOS && (
+              <Pressable
+                onPress={handleApple}
+                disabled={!!loading}
+                style={({ pressed }) => [
+                  styles.socialBtn,
+                  { backgroundColor: '#000', opacity: pressed || loading === 'apple' ? 0.75 : 1 },
+                ]}
+              >
+                <View style={styles.socialBtnIcon}>
+                  <FontAwesome5 name="apple" size={20} color="#fff" />
+                </View>
+                <Text style={[styles.socialBtnText, { color: '#fff' }]}>
+                  {loading === 'apple' ? '연결 중...' : 'Apple로 계속하기'}
+                </Text>
+              </Pressable>
+            )}
 
-            <View style={styles.devSeparator}>
-              <View style={styles.devLine} />
-              <Text style={styles.devSepText}>개발자 로그인</Text>
-              <View style={styles.devLine} />
-            </View>
-
-            <TextInput
-              style={styles.devInput}
-              placeholder="ID"
-              placeholderTextColor={C.textMute}
-              value={devId}
-              onChangeText={setDevId}
-              autoCapitalize="none"
-            />
-            <TextInput
-              style={[styles.devInput, { marginTop: 8 }]}
-              placeholder="비밀번호"
-              placeholderTextColor={C.textMute}
-              value={devPw}
-              onChangeText={setDevPw}
-              secureTextEntry
-            />
-            {loginError ? (
-              <Text style={styles.errorText}>{loginError}</Text>
-            ) : null}
             <Pressable
-              style={({ pressed }) => [styles.devLoginBtn, { opacity: pressed || isLoggingIn ? 0.7 : 1 }]}
-              onPress={handleDevLogin}
-              disabled={isLoggingIn}
+              onPress={handleKakao}
+              disabled={!!loading}
+              style={({ pressed }) => [
+                styles.socialBtn,
+                { backgroundColor: '#FEE500', opacity: pressed || loading === 'kakao' ? 0.75 : 1 },
+              ]}
             >
-              <Text style={styles.devLoginBtnText}>{isLoggingIn ? '로그인 중...' : '로그인'}</Text>
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => [styles.devSignupBtn, { opacity: pressed ? 0.8 : 1 }]}
-              onPress={handleDevSignup}
-            >
-              <Text style={styles.devSignupBtnText}>개발자 회원가입</Text>
+              <View style={styles.socialBtnIcon}>
+                <FontAwesome5 name="comment" size={19} color="#191600" solid />
+              </View>
+              <Text style={[styles.socialBtnText, { color: '#191600' }]}>
+                {loading === 'kakao' ? '연결 중...' : '카카오로 계속하기'}
+              </Text>
             </Pressable>
 
-            <Text style={styles.terms}>
-              계속하면 이용약관 및 개인정보처리방침에 동의하는 것으로 간주됩니다.
-            </Text>
+            <Pressable
+              onPress={handleGoogle}
+              disabled={!!loading}
+              style={({ pressed }) => [
+                styles.socialBtn,
+                { backgroundColor: '#fff', opacity: pressed || loading === 'google' ? 0.75 : 1 },
+              ]}
+            >
+              <View style={styles.socialBtnIcon}>
+                <GoogleIcon />
+              </View>
+              <Text style={[styles.socialBtnText, { color: '#202124' }]}>
+                {loading === 'google' ? '연결 중...' : 'Google로 계속하기'}
+              </Text>
+            </Pressable>
           </View>
-        </ScrollView>
-      </SafeAreaView>
-    </KeyboardAvoidingView>
+
+          <Text style={styles.terms}>
+            계속하면 이용약관 및 개인정보처리방침에 동의하는 것으로 간주됩니다.
+          </Text>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: C.bg,
-  },
+  container: { flex: 1, backgroundColor: C.bg },
   scroll: {
     paddingHorizontal: S[5],
     paddingBottom: S[8],
@@ -254,7 +279,6 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.display,
     fontSize: 64,
     lineHeight: 76,
-    letterSpacing: 0,
     color: C.text,
     textAlign: 'center',
     paddingHorizontal: S[5],
@@ -286,9 +310,7 @@ const styles = StyleSheet.create({
     marginBottom: S[4],
     textTransform: 'uppercase',
   },
-  socialStack: {
-    gap: 10,
-  },
+  socialStack: { gap: 10 },
   socialBtn: {
     height: 54,
     borderRadius: 14,
@@ -304,69 +326,6 @@ const styles = StyleSheet.create({
   socialBtnText: {
     fontFamily: FONTS.headBold,
     fontSize: FS.md,
-  },
-  devSeparator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: S[4],
-    gap: S[2],
-  },
-  devLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: C.line,
-  },
-  devSepText: {
-    fontFamily: FONTS.mono,
-    fontSize: FS.xs,
-    color: C.textMute,
-    letterSpacing: 1,
-  },
-  devInput: {
-    height: 48,
-    borderWidth: 1,
-    borderColor: C.line,
-    borderRadius: R.sm,
-    backgroundColor: C.surface2,
-    color: C.text,
-    paddingHorizontal: S[3],
-    fontFamily: FONTS.body,
-    fontSize: FS.md,
-  },
-  errorText: {
-    fontFamily: FONTS.body,
-    fontSize: FS.xs,
-    color: C.pink,
-    marginBottom: 6,
-    textAlign: 'center',
-  },
-  devLoginBtn: {
-    marginTop: 10,
-    height: 48,
-    borderRadius: R.sm,
-    backgroundColor: C.pink,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  devLoginBtnText: {
-    fontFamily: FONTS.headBold,
-    fontSize: FS.md,
-    color: '#fff',
-  },
-  devSignupBtn: {
-    marginTop: 10,
-    height: 48,
-    borderRadius: R.sm,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: 1,
-    borderColor: C.line,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  devSignupBtnText: {
-    fontFamily: FONTS.headBold,
-    fontSize: FS.md,
-    color: C.text,
   },
   terms: {
     fontFamily: FONTS.body,

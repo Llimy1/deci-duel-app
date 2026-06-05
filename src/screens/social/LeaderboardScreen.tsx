@@ -176,7 +176,7 @@ export default function LeaderboardScreen() {
               style={styles.myCard}
             >
               <Row style={{ gap: S[3], alignItems: 'center' }}>
-                <Text style={styles.myRankNum}>
+                <Text style={styles.myRankNum} numberOfLines={1}>
                   {myEntry ? `#${myEntry.rank}` : '—'}
                 </Text>
                 <Av
@@ -412,7 +412,7 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.display,
     fontSize: FS['2xl'],
     color: C.pink,
-    width: 52,
+    minWidth: 52,
     textAlign: 'center',
     shadowColor: C.pink,
     shadowOffset: { width: 0, height: 0 },

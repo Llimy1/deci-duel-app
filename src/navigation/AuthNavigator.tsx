@@ -5,7 +5,6 @@ import type { AuthStackParamList } from './types';
 
 import OnboardingScreen from '../screens/auth/OnboardingScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
-import DevSignupScreen from '../screens/auth/DevSignupScreen';
 import NicknameScreen from '../screens/auth/NicknameScreen';
 import PhotoScreen from '../screens/auth/PhotoScreen';
 import TermsScreen from '../screens/auth/TermsScreen';
@@ -30,7 +29,6 @@ export default function AuthNavigator({ initialRouteName }: Props) {
     >
       <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ animation: 'fade' }} />
       <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="DevSignup" component={DevSignupScreen} />
       <Stack.Screen name="Nickname" component={NicknameScreen} />
       <Stack.Screen name="Terms" component={TermsScreen} />
       <Stack.Screen name="Photo" component={PhotoScreen} />

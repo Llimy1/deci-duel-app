@@ -13,7 +13,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { C, FONTS, FS, S, R } from '../../theme';
 import { Av } from '../../components/ui';
 import { useAppStore } from '../../store';
-import { devSignup } from '../../api/auth';
+import { completeOAuthSignup } from '../../api/oauth';
 import {
   generateAndUploadRandomProfileImage,
   pickProfileImageAsset,
@@ -34,8 +34,8 @@ export default function PhotoScreen({ navigation, route }: Props) {
   const accessToken = useAppStore((s) => s.accessToken);
   const setTokens = useAppStore((s) => s.setTokens);
   const setProfileImageUrl = useAppStore((s) => s.setProfileImageUrl);
-  const pendingDevCredentials = useAppStore((s) => s.pendingDevCredentials);
-  const clearPendingDevCredentials = useAppStore((s) => s.clearPendingDevCredentials);
+  const pendingOAuthSignup = useAppStore((s) => s.pendingOAuthSignup);
+  const clearPendingOAuthSignup = useAppStore((s) => s.clearPendingOAuthSignup);
   const { height, width } = useWindowDimensions();
   const [selectedAsset, setSelectedAsset] = useState<ProfileImageAsset | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -43,11 +43,10 @@ export default function PhotoScreen({ navigation, route }: Props) {
   const narrow = width < 380;
 
   const ensureAccountSession = async () => {
-    if (!pendingDevCredentials) return;
+    if (!pendingOAuthSignup) return;
 
-    const result = await devSignup(
-      pendingDevCredentials.devId,
-      pendingDevCredentials.devPw,
+    const result = await completeOAuthSignup(
+      pendingOAuthSignup.signupToken,
       nickname,
       termsVersion,
       privacyVersion,
@@ -58,7 +57,7 @@ export default function PhotoScreen({ navigation, route }: Props) {
 
   const finishOnboarding = async (profileImageUrl?: string) => {
     if (profileImageUrl) setProfileImageUrl(profileImageUrl);
-    clearPendingDevCredentials();
+    clearPendingOAuthSignup();
     navigation.navigate('MicTest');
   };
 
@@ -98,7 +97,7 @@ export default function PhotoScreen({ navigation, route }: Props) {
     setIsSubmitting(true);
     try {
       await ensureAccountSession();
-      const profileImageUrl = accessToken || pendingDevCredentials
+      const profileImageUrl = accessToken || pendingOAuthSignup
         ? await generateAndUploadRandomProfileImage(nickname)
         : undefined;
       await finishOnboarding(profileImageUrl);
