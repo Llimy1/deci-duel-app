@@ -13,18 +13,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { FontAwesome5 } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import * as WebBrowser from 'expo-web-browser';
-import * as Linking from 'expo-linking';
 import { C, FONTS, FS, S, R } from '../../theme';
 import { useAppStore } from '../../store';
-import { oauthLogin, exchangeAuthCode, type OAuthLoginResponse } from '../../api/oauth';
-import { fetchMe } from '../../api/me';
+import { oauthLogin, type OAuthLoginResponse } from '../../api/oauth';
 import { saveTokens } from '../../utils/secureStorage';
 import { Toast } from '../../utils/toast';
 import { getErrorMessage } from '../../utils/errorHandler';
+import { fetchMeWithRetry } from '../../utils/profileHydration';
+import {
+  signInWithGoogleNative,
+  signInWithKakaoNative,
+  isOAuthCancelledError,
+} from '../../utils/oauthProviders';
 import type { AuthStackParamList } from '../../navigation/types';
-
-WebBrowser.maybeCompleteAuthSession();
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
@@ -91,7 +92,11 @@ export default function LoginScreen({ navigation }: Props) {
       await saveTokens(result.accessToken, result.refreshToken);
       setTokens(result.accessToken, result.refreshToken, result.user.id);
       setAuth(result.user.nickname, C.pink);
-      fetchMe().then(setMe).catch(() => {});
+      fetchMeWithRetry()
+        .then(setMe)
+        .catch(() => {
+          Toast.info('프로필 정보를 불러오지 못했습니다. 홈에서 다시 시도할 수 있어요.', 4000);
+        });
     } else {
       setPendingOAuthSignup(result.provider, result.signupToken);
       navigation.navigate('Nickname');
@@ -108,8 +113,8 @@ export default function LoginScreen({ navigation }: Props) {
       if (!credential.identityToken) throw new Error('Apple identityToken 없음');
       const result = await oauthLogin('apple', { idToken: credential.identityToken });
       await handleOAuthResult(result);
-    } catch (e: any) {
-      if (e.code !== 'ERR_REQUEST_CANCELED') {
+    } catch (e) {
+      if (!isOAuthCancelledError(e)) {
         Toast.error(getErrorMessage(e));
       }
     } finally {
@@ -121,24 +126,13 @@ export default function LoginScreen({ navigation }: Props) {
     if (loading) return;
     setLoading('google');
     try {
-      const appRedirectUri = Linking.createURL('oauth/callback');
-      const initUrl =
-        `${process.env.EXPO_PUBLIC_API_BASE_URL}/auth/oauth/google/init` +
-        `?redirectUri=${encodeURIComponent(appRedirectUri)}`;
-
-      const authResult = await WebBrowser.openAuthSessionAsync(initUrl, appRedirectUri);
-      if (authResult.type !== 'success') return;
-
-      const parsed = Linking.parse(authResult.url);
-      const code = parsed.queryParams?.code as string | undefined;
-      const error = parsed.queryParams?.error as string | undefined;
-
-      if (error || !code) throw new Error('Google 로그인에 실패했습니다.');
-
-      const result = await exchangeAuthCode(code);
+      const idToken = await signInWithGoogleNative();
+      const result = await oauthLogin('google', { idToken });
       await handleOAuthResult(result);
-    } catch (e: any) {
-      Toast.error(getErrorMessage(e));
+    } catch (e) {
+      if (!isOAuthCancelledError(e)) {
+        Toast.error(getErrorMessage(e));
+      }
     } finally {
       setLoading(null);
     }
@@ -148,24 +142,13 @@ export default function LoginScreen({ navigation }: Props) {
     if (loading) return;
     setLoading('kakao');
     try {
-      const appRedirectUri = Linking.createURL('oauth/callback');
-      const initUrl =
-        `${process.env.EXPO_PUBLIC_API_BASE_URL}/auth/oauth/kakao/init` +
-        `?redirectUri=${encodeURIComponent(appRedirectUri)}`;
-
-      const authResult = await WebBrowser.openAuthSessionAsync(initUrl, appRedirectUri);
-      if (authResult.type !== 'success') return;
-
-      const parsed = Linking.parse(authResult.url);
-      const code = parsed.queryParams?.code as string | undefined;
-      const error = parsed.queryParams?.error as string | undefined;
-
-      if (error || !code) throw new Error('카카오 로그인에 실패했습니다.');
-
-      const result = await exchangeAuthCode(code);
+      const accessToken = await signInWithKakaoNative();
+      const result = await oauthLogin('kakao', { accessToken });
       await handleOAuthResult(result);
-    } catch (e: any) {
-      Toast.error(getErrorMessage(e));
+    } catch (e) {
+      if (!isOAuthCancelledError(e)) {
+        Toast.error(getErrorMessage(e));
+      }
     } finally {
       setLoading(null);
     }

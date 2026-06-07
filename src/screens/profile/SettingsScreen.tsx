@@ -13,7 +13,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import appJson from '../../../app.json';
+import Constants from 'expo-constants';
 import { Av, Row } from '../../components/ui';
 import { C, FONTS, FS, R, S } from '../../theme';
 import { useAppStore } from '../../store';
@@ -28,12 +28,14 @@ import {
 import { clearTokens } from '../../utils/secureStorage';
 import { getErrorMessage } from '../../utils/errorHandler';
 import { Toast } from '../../utils/toast';
+import { ONBOARDING_KEY } from '../../constants/storageKeys';
 import type { ProfileStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<ProfileStackParamList, 'Settings'>;
 
-const SOUND_KEY = 'deci_settings_sound_enabled';
-const HAPTIC_KEY = 'deci_settings_haptic_enabled';
+// TODO: 효과음/진동 설정을 다시 제공할 때 아래 키와 로딩/토글 UI를 복구한다.
+// const SOUND_KEY = 'deci_settings_sound_enabled';
+// const HAPTIC_KEY = 'deci_settings_haptic_enabled';
 const SWATCHES = [C.pink, C.cyan, C.yellow, C.lime, C.purple];
 
 export default function SettingsScreen({ navigation }: Props) {
@@ -47,35 +49,35 @@ export default function SettingsScreen({ navigation }: Props) {
   const setProfileImageUrl = useAppStore((s) => s.setProfileImageUrl);
   const [nicknameDraft, setNicknameDraft] = useState(nickname);
   const [selectedColor, setSelectedColor] = useState(avatarColor);
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const [hapticEnabled, setHapticEnabled] = useState(true);
+  // const [soundEnabled, setSoundEnabled] = useState(true);
+  // const [hapticEnabled, setHapticEnabled] = useState(true);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSavingNickname, setIsSavingNickname] = useState(false);
   const [isSavingColor, setIsSavingColor] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
 
-  const appVersion = useMemo(() => appJson.expo.version, []);
+  const appVersion = useMemo(() => Constants.expoConfig?.version ?? '1.0.0', []);
 
-  useEffect(() => {
-    let mounted = true;
-
-    async function loadSettings() {
-      const [sound, haptic] = await Promise.all([
-        AsyncStorage.getItem(SOUND_KEY),
-        AsyncStorage.getItem(HAPTIC_KEY),
-      ]);
-
-      if (!mounted) return;
-      if (sound !== null) setSoundEnabled(sound === 'true');
-      if (haptic !== null) setHapticEnabled(haptic === 'true');
-    }
-
-    loadSettings();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  // useEffect(() => {
+  //   let mounted = true;
+  //
+  //   async function loadSettings() {
+  //     const [sound, haptic] = await Promise.all([
+  //       AsyncStorage.getItem(SOUND_KEY),
+  //       AsyncStorage.getItem(HAPTIC_KEY),
+  //     ]);
+  //
+  //     if (!mounted) return;
+  //     if (sound !== null) setSoundEnabled(sound === 'true');
+  //     if (haptic !== null) setHapticEnabled(haptic === 'true');
+  //   }
+  //
+  //   loadSettings();
+  //   return () => {
+  //     mounted = false;
+  //   };
+  // }, []);
 
   useEffect(() => {
     setNicknameDraft(nickname);
@@ -85,15 +87,15 @@ export default function SettingsScreen({ navigation }: Props) {
     setSelectedColor(avatarColor);
   }, [avatarColor]);
 
-  const handleSoundToggle = async (value: boolean) => {
-    setSoundEnabled(value);
-    await AsyncStorage.setItem(SOUND_KEY, String(value));
-  };
-
-  const handleHapticToggle = async (value: boolean) => {
-    setHapticEnabled(value);
-    await AsyncStorage.setItem(HAPTIC_KEY, String(value));
-  };
+  // const handleSoundToggle = async (value: boolean) => {
+  //   setSoundEnabled(value);
+  //   await AsyncStorage.setItem(SOUND_KEY, String(value));
+  // };
+  //
+  // const handleHapticToggle = async (value: boolean) => {
+  //   setHapticEnabled(value);
+  //   await AsyncStorage.setItem(HAPTIC_KEY, String(value));
+  // };
 
   const handleNicknameSave = async () => {
     if (isSavingNickname) return;
@@ -158,6 +160,7 @@ export default function SettingsScreen({ navigation }: Props) {
             // 서버 로그아웃 실패와 무관하게 로컬 세션은 종료한다.
           } finally {
             await clearTokens();
+            await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
             logout();
           }
         },
@@ -188,6 +191,7 @@ export default function SettingsScreen({ navigation }: Props) {
       disconnectSocket();
       await deleteAccount();
       await clearTokens();
+      await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
       logout();
     } catch (e) {
       Toast.error(getErrorMessage(e));
@@ -266,10 +270,12 @@ export default function SettingsScreen({ navigation }: Props) {
           </View>
         </Section>
 
+        {/*
         <Section title="앱 설정">
           <ToggleRow label="사운드" value={soundEnabled} onValueChange={handleSoundToggle} />
           <ToggleRow label="햅틱" value={hapticEnabled} onValueChange={handleHapticToggle} isLast />
         </Section>
+        */}
 
         <Section title="정보">
           <InfoRow label="버전" value={appVersion} />

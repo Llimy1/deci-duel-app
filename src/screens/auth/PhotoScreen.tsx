@@ -53,12 +53,25 @@ export default function PhotoScreen({ navigation, route }: Props) {
     );
     await saveTokens(result.accessToken, result.refreshToken);
     setTokens(result.accessToken, result.refreshToken, result.user.id);
+    clearPendingOAuthSignup();
   };
 
-  const finishOnboarding = async (profileImageUrl?: string) => {
-    if (profileImageUrl) setProfileImageUrl(profileImageUrl);
-    clearPendingOAuthSignup();
+  const finishOnboarding = async (profileImageUrl?: string | null) => {
+    setProfileImageUrl(profileImageUrl ?? null);
     navigation.navigate('MicTest');
+  };
+
+  const tryRandomProfileImage = async () => {
+    try {
+      return await generateAndUploadRandomProfileImage(nickname);
+    } catch {
+      return null;
+    }
+  };
+
+  const finishWithDefaultAvatar = async () => {
+    Toast.error('프로필 사진 설정에 실패했습니다. 기본 아바타로 계속 진행합니다.');
+    await finishOnboarding(null);
   };
 
   const handlePickImage = async () => {
@@ -79,12 +92,22 @@ export default function PhotoScreen({ navigation, route }: Props) {
     setIsSubmitting(true);
     try {
       await ensureAccountSession();
-      const profileImageUrl = await uploadProfileImageFromUri(
-        selectedAsset.uri,
-        selectedAsset.fileName,
-        selectedAsset.mimeType
-      );
-      await finishOnboarding(profileImageUrl);
+      try {
+        const profileImageUrl = await uploadProfileImageFromUri(
+          selectedAsset.uri,
+          selectedAsset.fileName,
+          selectedAsset.mimeType
+        );
+        await finishOnboarding(profileImageUrl);
+      } catch {
+        const fallbackProfileImageUrl = await tryRandomProfileImage();
+        if (fallbackProfileImageUrl) {
+          Toast.error('프로필 사진 설정에 실패해 랜덤 아바타로 대체했습니다.');
+          await finishOnboarding(fallbackProfileImageUrl);
+          return;
+        }
+        await finishWithDefaultAvatar();
+      }
     } catch (e) {
       Toast.error(getErrorMessage(e));
     } finally {
@@ -97,10 +120,17 @@ export default function PhotoScreen({ navigation, route }: Props) {
     setIsSubmitting(true);
     try {
       await ensureAccountSession();
-      const profileImageUrl = accessToken || pendingOAuthSignup
-        ? await generateAndUploadRandomProfileImage(nickname)
-        : undefined;
-      await finishOnboarding(profileImageUrl);
+      const shouldGenerateProfileImage = accessToken || pendingOAuthSignup;
+      if (!shouldGenerateProfileImage) {
+        await finishOnboarding(null);
+        return;
+      }
+      const profileImageUrl = await tryRandomProfileImage();
+      if (profileImageUrl) {
+        await finishOnboarding(profileImageUrl);
+        return;
+      }
+      await finishWithDefaultAvatar();
     } catch (e) {
       Toast.error(getErrorMessage(e));
     } finally {

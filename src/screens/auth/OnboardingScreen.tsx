@@ -13,8 +13,8 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { C, FONTS, FS, S, R } from '../../theme';
 import type { AuthStackParamList } from '../../navigation/types';
+import { ONBOARDING_KEY } from '../../constants/storageKeys';
 
-export const ONBOARDING_KEY = '@deciduel/onboarded';
 type Props = NativeStackScreenProps<AuthStackParamList, 'Onboarding'>;
 
 const TOTAL_SLIDES = 2;

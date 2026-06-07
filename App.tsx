@@ -26,16 +26,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppStore } from './src/store';
 import AuthNavigator from './src/navigation/AuthNavigator';
 import MainNavigator from './src/navigation/MainNavigator';
-import { ONBOARDING_KEY } from './src/screens/auth/OnboardingScreen';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import ToastContainer from './src/components/ToastContainer';
 import OfflineBanner from './src/components/OfflineBanner';
 import SplashAnimation from './src/components/SplashAnimation';
 import { C } from './src/theme';
+import { ONBOARDING_KEY } from './src/constants/storageKeys';
 import { getTokens, saveTokens, clearTokens } from './src/utils/secureStorage';
 import { refreshTokens } from './src/api/auth';
-import { fetchMe } from './src/api/me';
 import { Toast } from './src/utils/toast';
+import { fetchMeWithRetry } from './src/utils/profileHydration';
 
 LogBox.ignoreLogs([
   "Cannot read property 'host' of undefined",
@@ -78,10 +78,10 @@ export default function App() {
         await saveTokens(result.accessToken, result.refreshToken);
         restoreSession(result.accessToken, result.refreshToken, result.user.id, result.user.nickname);
         try {
-          const me = await fetchMe();
+          const me = await fetchMeWithRetry();
           setMe(me);
         } catch {
-          Toast.info('프로필 정보를 불러오지 못했습니다.', 3000);
+          Toast.info('프로필 정보를 불러오지 못했습니다. 홈에서 다시 시도할 수 있어요.', 4000);
         }
       } catch {
         await clearTokens();
@@ -100,6 +100,13 @@ export default function App() {
       setSessionExpired(false);
     }
   }, [sessionExpired, splashDone, sessionRestored]);
+
+  useEffect(() => {
+    if (!isLoggedIn || hasOnboarded) return;
+
+    setHasOnboarded(true);
+    AsyncStorage.setItem(ONBOARDING_KEY, 'true').catch(() => {});
+  }, [hasOnboarded, isLoggedIn]);
 
   // ── Render ──────────────────────────────────────────────────
   // Overlays (Toast, OfflineBanner) are always rendered so they
@@ -146,7 +153,12 @@ export default function App() {
           <NavigationContainer>
             {isLoggedIn
               ? <MainNavigator />
-              : <AuthNavigator initialRouteName={hasOnboarded ? 'Login' : 'Onboarding'} />
+              : (
+                <AuthNavigator
+                  key={hasOnboarded ? 'auth-login' : 'auth-onboarding'}
+                  initialRouteName={hasOnboarded ? 'Login' : 'Onboarding'}
+                />
+              )
             }
           </NavigationContainer>
           <StatusBar style="light" />

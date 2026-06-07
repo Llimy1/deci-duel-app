@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { useAppStore } from '../store';
 import { clearTokens, getTokens, saveTokens } from '../utils/secureStorage';
 import { Toast } from '../utils/toast';
@@ -20,7 +21,16 @@ interface ApiOptions {
   retryOnUnauthorized?: boolean;
 }
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+export function resolveApiBaseUrl(rawUrl = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:3000') {
+  if (Platform.OS !== 'android') return rawUrl;
+  return rawUrl
+    .replace('http://localhost:', 'http://10.0.2.2:')
+    .replace('https://localhost:', 'https://10.0.2.2:')
+    .replace('http://127.0.0.1:', 'http://10.0.2.2:')
+    .replace('https://127.0.0.1:', 'https://10.0.2.2:');
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 let refreshPromise: Promise<string> | null = null;
 let expiryNotified = false;

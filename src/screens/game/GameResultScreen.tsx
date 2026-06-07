@@ -7,7 +7,8 @@ import { C, FONTS, FS, S } from '../../theme';
 import type { GameStackParamList } from '../../navigation/types';
 import { useGameStore } from '../../store/gameStore';
 import { useAppStore } from '../../store';
-import { fetchMe } from '../../api/me';
+import { Toast } from '../../utils/toast';
+import { fetchMeWithRetry } from '../../utils/profileHydration';
 
 type Props = NativeStackScreenProps<GameStackParamList, 'GameResult'>;
 
@@ -31,7 +32,11 @@ export default function GameResultScreen({ navigation, route }: Props) {
   const label = result === 'win' ? 'WIN' : result === 'lose' ? 'LOSE' : 'DRAW';
 
   useEffect(() => {
-    fetchMe().then(setMe).catch(() => {});
+    fetchMeWithRetry()
+      .then(setMe)
+      .catch(() => {
+        Toast.info('최신 기록을 불러오지 못했습니다. 홈에서 다시 시도할 수 있어요.', 4000);
+      });
   }, [setMe]);
 
   useEffect(() => {

@@ -14,6 +14,7 @@ import { useAppStore } from '../store';
 import { createSoloRecord, getSoloRecord } from '../api/soloRecord';
 import { showErrorAlert } from '../utils/errorHandler';
 import { requireMicPermission } from '../utils/micPermission';
+import { Toast } from '../utils/toast';
 import type { DiaryStackParamList, HomeStackParamList } from '../navigation/types';
 
 const MEASURE_DURATION = 5.0;
@@ -37,21 +38,40 @@ export default function SoloMeasureScreen({ navigation, route }: Props) {
   const [soloBest, setSoloBest] = useState(0);
   const [diarySheetVisible, setDiarySheetVisible] = useState(false);
   const [diarySavedToastVisible, setDiarySavedToastVisible] = useState(false);
+  const [soloRecordLoadFailed, setSoloRecordLoadFailed] = useState(false);
+  const [isRetryingSoloRecord, setIsRetryingSoloRecord] = useState(false);
 
   const mic = useMicDb();
   const flashAnim = useRef(new Animated.Value(0)).current;
   const toastAnim = useRef(new Animated.Value(0)).current;
   const diaryToastAnim = useRef(new Animated.Value(0)).current;
+  const soloRecordLoadingRef = useRef(false);
+
+  const loadSoloRecord = useCallback(async (showToast = false) => {
+    if (!accessToken) return;
+    if (soloRecordLoadingRef.current) return;
+    soloRecordLoadingRef.current = true;
+    setIsRetryingSoloRecord(true);
+    try {
+      const res = await getSoloRecord();
+      setSoloBest(res.data.bestDb);
+      setPrevPeak(res.data.peakDb);
+      setSoloRecordLoadFailed(false);
+      if (showToast) Toast.success('솔로 기록을 다시 불러왔습니다.');
+    } catch {
+      setSoloRecordLoadFailed(true);
+      if (showToast) {
+        Toast.error('솔로 기록을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
+      }
+    } finally {
+      soloRecordLoadingRef.current = false;
+      setIsRetryingSoloRecord(false);
+    }
+  }, [accessToken]);
 
   useEffect(() => {
-    if (!accessToken) return;
-    getSoloRecord()
-      .then((res) => {
-        setSoloBest(res.data.bestDb);
-        setPrevPeak(res.data.peakDb);
-      })
-      .catch(() => {});
-  }, []);
+    loadSoloRecord();
+  }, [loadSoloRecord]);
   const resultAnim = useRef(new Animated.Value(0)).current;
   const timerAnim = useRef(new Animated.Value(1)).current;
   const diaryMode = route.params?.diaryMode === true;
@@ -296,6 +316,25 @@ export default function SoloMeasureScreen({ navigation, route }: Props) {
       </View>
 
       {/* Stats */}
+      {soloRecordLoadFailed && (
+        <Pressable
+          onPress={() => loadSoloRecord(true)}
+          disabled={isRetryingSoloRecord}
+          style={({ pressed }) => [
+            styles.recordRetry,
+            { opacity: pressed || isRetryingSoloRecord ? 0.78 : 1 },
+          ]}
+        >
+          <View style={styles.recordRetryTextWrap}>
+            <Text style={styles.recordRetryTitle}>솔로 기록을 불러오지 못했습니다.</Text>
+            <Text style={styles.recordRetrySub}>최고 기록과 이전 기록을 다시 가져옵니다.</Text>
+          </View>
+          <Text style={styles.recordRetryAction}>
+            {isRetryingSoloRecord ? '불러오는 중' : '다시 불러오기'}
+          </Text>
+        </Pressable>
+      )}
+
       <View style={[styles.statsRow, compact && styles.statsRowCompact]}>
         <StatBox label="솔로 최고" value={soloBest > 0 ? soloBest.toFixed(2) : '—'} unit="dB" color={C.yellow} />
         <StatBox label="최대" value={phase !== 'ready' ? mic.peak.toFixed(2) : '—'} unit="dB" color={C.pink} />
@@ -572,6 +611,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: S[5],
     gap: S[2],
     marginBottom: S[3],
+  },
+  recordRetry: {
+    marginHorizontal: S[5],
+    marginTop: S[2],
+    paddingHorizontal: S[4],
+    paddingVertical: S[3],
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: `${C.yellow}88`,
+    backgroundColor: `${C.yellow}14`,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S[3],
+  },
+  recordRetryTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  recordRetryTitle: {
+    fontFamily: FONTS.bodyBold,
+    fontSize: FS.sm,
+    color: C.text,
+  },
+  recordRetrySub: {
+    fontFamily: FONTS.body,
+    fontSize: FS.xs,
+    color: C.textDim,
+  },
+  recordRetryAction: {
+    fontFamily: FONTS.monoBold,
+    fontSize: FS.xs,
+    color: C.yellow,
   },
   statsRowCompact: {
     marginBottom: S[2],

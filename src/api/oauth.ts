@@ -36,15 +36,6 @@ export async function oauthLogin(
   return res.data;
 }
 
-export async function exchangeAuthCode(code: string): Promise<OAuthLoginResponse> {
-  const res = await apiPost<OAuthLoginResponse>(
-    '/auth/oauth/exchange',
-    { code },
-    { skipAuth: true },
-  );
-  return res.data;
-}
-
 export async function completeOAuthSignup(
   signupToken: string,
   nickname: string,

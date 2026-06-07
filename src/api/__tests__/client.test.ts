@@ -48,7 +48,8 @@ jest.mock('../../utils/secureStorage', () => ({
   clearTokens: jest.fn().mockResolvedValue(undefined),
 }));
 
-import { apiGet, apiPost, apiPatch, apiDelete } from '../client';
+import { Platform } from 'react-native';
+import { apiGet, apiPost, apiPatch, apiDelete, resolveApiBaseUrl } from '../client';
 import { getTokens } from '../../utils/secureStorage';
 
 const mockFetch = jest.fn() as jest.MockedFunction<typeof fetch>;
@@ -98,6 +99,27 @@ beforeEach(() => {
 
 afterEach(() => {
   jest.restoreAllMocks();
+});
+
+describe('resolveApiBaseUrl', () => {
+  const originalOS = Platform.OS;
+
+  afterEach(() => {
+    Platform.OS = originalOS;
+  });
+
+  it('Android에서는 localhost를 에뮬레이터 host loopback 주소로 변환한다', () => {
+    Platform.OS = 'android';
+
+    expect(resolveApiBaseUrl('http://localhost:3000')).toBe('http://10.0.2.2:3000');
+    expect(resolveApiBaseUrl('http://127.0.0.1:3000')).toBe('http://10.0.2.2:3000');
+  });
+
+  it('iOS에서는 localhost를 그대로 둔다', () => {
+    Platform.OS = 'ios';
+
+    expect(resolveApiBaseUrl('http://localhost:3000')).toBe('http://localhost:3000');
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

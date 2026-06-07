@@ -1,22 +1,30 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, Pressable, ScrollView, StyleSheet,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StageBg, Card, Av, Row } from '../components/ui';
 import { DbViz } from '../components/DbViz';
 import { C, FONTS, FS, R, S, gradHot } from '../theme';
 import { useAppStore } from '../store';
 import type { RootStackParamList } from '../navigation/types';
+import { Toast } from '../utils/toast';
+import { fetchMeWithRetry } from '../utils/profileHydration';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
 export default function HomeScreen({ navigation }: Props) {
   const user = useAppStore((s) => s.user);
+  const accessToken = useAppStore((s) => s.accessToken);
+  const setMe = useAppStore((s) => s.setMe);
   const { top } = useSafeAreaInsets();
   const [tick, setTick] = useState(0);
+  const [profileLoadFailed, setProfileLoadFailed] = useState(false);
+  const [isRetryingProfile, setIsRetryingProfile] = useState(false);
+  const profileLoadingRef = useRef(false);
 
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 80);
@@ -24,6 +32,32 @@ export default function HomeScreen({ navigation }: Props) {
   }, []);
 
   const waveValue = 108 + Math.sin(tick * 0.3) * 6;
+
+  const refreshProfile = useCallback(async (showToast = false) => {
+    if (!accessToken || profileLoadingRef.current) return;
+    profileLoadingRef.current = true;
+    setIsRetryingProfile(true);
+    try {
+      const me = await fetchMeWithRetry();
+      setMe(me);
+      setProfileLoadFailed(false);
+      if (showToast) Toast.success('프로필 정보를 다시 불러왔습니다.');
+    } catch {
+      setProfileLoadFailed(true);
+      if (showToast) {
+        Toast.error('프로필 정보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
+      }
+    } finally {
+      profileLoadingRef.current = false;
+      setIsRetryingProfile(false);
+    }
+  }, [accessToken, setMe]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshProfile();
+    }, [refreshProfile])
+  );
 
   return (
     <StageBg>
@@ -48,6 +82,25 @@ export default function HomeScreen({ navigation }: Props) {
           <Text style={styles.wordmark}>DECIDUEL</Text>
           <Text style={styles.tagline}>외쳐라 · 측정해라 · 이겨라</Text>
         </View>
+
+        {profileLoadFailed && (
+          <Pressable
+            onPress={() => refreshProfile(true)}
+            disabled={isRetryingProfile}
+            style={({ pressed }) => [
+              styles.profileRetry,
+              { opacity: pressed || isRetryingProfile ? 0.78 : 1 },
+            ]}
+          >
+            <View style={styles.profileRetryTextWrap}>
+              <Text style={styles.profileRetryTitle}>기록 정보를 불러오지 못했습니다.</Text>
+              <Text style={styles.profileRetrySub}>최고 기록과 프로필을 다시 가져와야 정확히 표시됩니다.</Text>
+            </View>
+            <Text style={styles.profileRetryAction}>
+              {isRetryingProfile ? '불러오는 중' : '다시 불러오기'}
+            </Text>
+          </Pressable>
+        )}
 
         {/* Best dB card */}
         <Card accent={C.pink} style={styles.bestCard} padding={14}>
@@ -163,6 +216,38 @@ const styles = StyleSheet.create({
     color: C.textDim,
     letterSpacing: 0,
     marginTop: 4,
+  },
+  profileRetry: {
+    marginHorizontal: S[5],
+    paddingHorizontal: S[4],
+    paddingVertical: S[3],
+    borderRadius: R.md,
+    borderWidth: 1,
+    borderColor: `${C.yellow}88`,
+    backgroundColor: `${C.yellow}14`,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S[3],
+  },
+  profileRetryTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  profileRetryTitle: {
+    fontFamily: FONTS.bodyBold,
+    fontSize: FS.sm,
+    color: C.text,
+  },
+  profileRetrySub: {
+    fontFamily: FONTS.body,
+    fontSize: FS.xs,
+    color: C.textDim,
+    lineHeight: 16,
+  },
+  profileRetryAction: {
+    fontFamily: FONTS.monoBold,
+    fontSize: FS.xs,
+    color: C.yellow,
   },
   bestCard: {
     marginHorizontal: S[5],

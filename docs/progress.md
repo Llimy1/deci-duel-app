@@ -1,10 +1,10 @@
 # DeciDuel App 진행 상황
 
 ## 마지막 업데이트
-2026-06-06
+2026-06-07
 
 ## 현재 상태
-서버사이드 OAuth 전환 완료 (Kakao/Google). Apple은 expo-apple-authentication 네이티브 방식. Android 에뮬레이터 테스트 환경 구성 완료 (adb reverse tcp:3000 tcp:3000). LeaderboardScreen myRankNum 두 자리 이상 줄바꿈 버그 수정. OAuth E2E QA 진행 중 (Kakao/Google 개발자 콘솔 redirect URI 등록 필요). Phase B(효과음/햅틱, 딥링크, i18n)는 OAuth QA 이후 진행한다.
+Apple/Google/Kakao OAuth를 전부 **네이티브 SDK 기반**으로 통일 완료 (Codex [14:14] "정정" 지시 반영 — 2026-06-06의 서버사이드 Authorization Code Flow 결정 폐기). 서버 `POST /auth/oauth`가 Apple/Google idToken, Kakao accessToken을 공통으로 검증하며 audience(`aud`) 검증을 추가했고, 앱은 `@react-native-google-signin/google-signin` + `@react-native-kakao/{core,user}`로 LoginScreen을 재작성했다 (`src/utils/oauthProviders.ts` 헬퍼 모듈 신규). 서버/앱 빌드·테스트 전부 통과 (서버 142/142, 앱 113/113). 다음 단계는 dev client 재빌드(`npx expo run:ios`/`run:android`) 후 실기기 E2E QA. Phase B(효과음/햅틱, 딥링크, i18n)는 OAuth QA 이후 진행한다.
 
 ## 완료된 작업
 
@@ -390,9 +390,34 @@
 - `myRankNum` style `width: 52` → `minWidth: 52` + `numberOfLines={1}` 추가
 - 두 자리 이상 순위(`#10`, `#100`)에서 줄바꿈 발생하던 문제 해결
 
+## 완료된 작업 (2026-06-07 — Google/Kakao 네이티브 SDK 전환 + 서버 audience 검증)
+
+Codex [2026-06-07 14:14] "정정 — Google/Kakao도 네이티브 SDK 기준으로 OAuth 전환" 지시 반영. 2026-06-06에 구현한 서버사이드 Authorization Code Flow(Kakao/Google)를 폐기하고, Apple과 동일하게 앱이 직접 idToken/accessToken을 획득해 `POST /auth/oauth`로 전달하는 방식으로 통일.
+
+### 서버 (`deci-duel-server`)
+- **`auth.service.ts`**: `pendingStates`/`pendingAuthCodes` Map과 `kakaoInitUrl`/`kakaoCallback`/`googleInitUrl`/`googleCallback`/`exchangeAuthCode`/`createOAuthState`/`consumeOAuthState`/`buildAuthCodeRedirect`/`ALLOWED_REDIRECT_SCHEMES` 전부 제거
+- **audience(`aud`) 검증 추가**: `assertAudienceAllowed()` 헬퍼 신설 — `APPLE_ALLOWED_AUDIENCES`/`GOOGLE_ALLOWED_CLIENT_IDS`(콤마 구분 allowlist) 환경변수 기준으로 `aud` claim 검증, 미설정 시 검증 스킵(개발 편의, 프로덕션 전 필수 설정)
+- **`verifyOAuthToken` 분기 강화**: provider별 필수 토큰 누락 시 명시적 400 (`OAUTH_TOKEN_REQUIRED`) — Apple/Google은 idToken, Kakao는 accessToken
+- **`auth.controller.ts`**: `kakaoInit`/`kakaoCallback`/`exchangeAuthCode`/`googleInit`/`googleCallback` 엔드포인트 제거. `POST /auth/oauth`(통합 진입점)/`POST /auth/oauth/signup`/`refresh`/`logout`만 유지
+- **`auth.request.ts`**: `ExchangeAuthCodeRequest` DTO 제거
+- **`auth.service.spec.ts` 신규**: provider별 토큰 누락(400), Apple/Google audience mismatch(401)·match·env-미설정 스킵, Kakao 검증 실패(401: non-2xx/네트워크 오류/`id` 누락) 등 12개 테스트 추가
+- **`.env.example`**: `KAKAO_CLIENT_ID/SECRET/REDIRECT_URI`, `GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI` 제거 → `APPLE_ALLOWED_AUDIENCES`/`GOOGLE_ALLOWED_CLIENT_IDS` 추가 (Kakao는 REST 키 불필요 — accessToken을 그대로 Bearer 전달해 검증)
+- **`docs/api.md`**: 기존 server-side OAuth 엔드포인트를 "DEPRECATED & REMOVED"로 명시, `POST /auth/oauth` 통합 스펙(요청/응답/에러코드/audience 검증) 전면 재작성
+- 검증: `npx tsc --noEmit` 통과, `npx jest src/auth` 25/25, 전체 `npx jest --runInBand` **142/142 통과**
+
+### 앱 (`deci-duel-app`)
+- **패키지 추가**: `@react-native-google-signin/google-signin`, `@react-native-kakao/{core,user}`, `expo-build-properties` (+ 기존 `expo-dev-client`, `eas.json` 재사용)
+- **`app.json` plugins 구성**: `@react-native-google-signin/google-signin`(`iosUrlScheme: com.googleusercontent.apps.<iOS Client ID prefix>`), `@react-native-kakao/core`(`nativeAppKey`, `android.authCodeHandlerActivity`, `ios.handleKakaoOpenUrl`), `expo-build-properties`
+- **`src/utils/oauthProviders.ts` 신규**: `signInWithGoogleNative()`/`signInWithKakaoNative()` — 각각 idToken/accessToken만 반환. `GoogleSignin.configure()`/`initializeKakaoSDK()`를 모듈 내부에서 idempotent 1회 lazy 초기화. `OAuthCancelledError`(취소)/`OAuthProviderError`(실패) 구분으로 LoginScreen의 Toast 분기를 단순화
+- **`LoginScreen.tsx`**: `handleGoogle`/`handleKakao`를 `WebBrowser.openAuthSessionAsync` + `Linking` 패턴에서 `signInWithGoogleNative`/`signInWithKakaoNative` 직접 호출로 교체. `expo-web-browser`/`expo-linking`/`WebBrowser.maybeCompleteAuthSession()` 제거. 취소는 `instanceof OAuthCancelledError`로 판별해 Toast 미노출
+- **`src/api/oauth.ts`**: `exchangeAuthCode()` 제거 (`oauthLogin`/`completeOAuthSignup`만 유지)
+- **`src/utils/__tests__/oauthProviders.test.ts` 신규**: idToken/accessToken 누락, 사용자 취소(Toast 미노출 신호), Google `PLAY_SERVICES_NOT_AVAILABLE`, Kakao 카카오톡 미설치/일반 SDK 오류 등 10개 테스트 — 네이티브 SDK는 `jest.mock`으로 대체
+- 검증: `npx tsc --noEmit` 통과, `npx jest --runInBand` **113/113 통과**
+
 ## 진행 중인 작업
-- OAuth E2E QA: Kakao/Google 개발자 콘솔에 `http://localhost:3000/auth/oauth/kakao(google)/callback` 등록 후 실기기/에뮬레이터 테스트
-- Apple Sign In: 개발 빌드(`npx expo run:ios`) 환경에서 테스트 필요
+- **dev client 재빌드 필요**: 네이티브 설정(`app.json` plugins) 변경으로 `npx expo run:ios` / `npx expo run:android` 재실행 후 실기기 OAuth E2E QA
+- Apple Sign In: 개발 빌드 환경에서 테스트 필요 (네이티브 SDK 전환과 무관하게 기존 유지)
+- `docs/CLAUDE_TO_CODEX.md`에 완료 보고 작성 예정 (Codex "완료 보고" 체크리스트 기준)
 - Phase B 앱 완성도(효과음/햅틱, 딥링크, i18n)는 OAuth QA 이후 진행
 
 ## 출시 전 작업 로드맵
@@ -493,3 +518,23 @@
 | 2026-06-06 | 서버사이드 OAuth Authorization Code Flow | Expo Go에서 앱사이드 Kakao/Google OAuth 불가 (커스텀 스킴 미지원). 서버가 OAuth 처리 후 앱 deep link로 auth code 전달 |
 | 2026-06-06 | Apple은 expo-apple-authentication 네이티브 유지 | Expo Go에서 Apple 웹 OAuth 불가, expo-apple-authentication은 개발 빌드(npx expo run:ios)에서 동작 |
 | 2026-06-06 | adb reverse tcp:3000 tcp:3000 | Android 에뮬레이터에서 localhost = 에뮬레이터 자신. IP 변경 없이 Mac 서버 접근. Google 콘솔에 IP 주소 등록 불가 문제도 해결 |
+| 2026-06-07 | Expo Go 지원 포기 → development build/EAS 기준 전환 | Codex [14:14] 지시 + 사용자 결정. Apple/Google/Kakao OAuth를 모두 네이티브 SDK(@react-native-google-signin, @react-native-kakao)로 통일하기 위해 필수. Expo Go에서는 서드파티 네이티브 모듈 동작 불가 |
+| 2026-06-07 | 앱 ID를 com.anonymous.deciduelapp → com.deciduel.app으로 확정 | OAuth 콘솔(Apple/Google/Kakao) 등록 식별자라 다른 모든 설정의 전제조건. 사용자 확정 후 app.json 변경 + `expo prebuild --clean`으로 ios/android 네이티브 프로젝트 재생성, pod install 완료 |
+| 2026-06-07 | 디버그 키스토어 SHA-1/SHA-256은 prebuild 전후 동일 (~/.android/debug.keystore 공유) | Google/Kakao 콘솔에 디버그 지문을 먼저 등록해도 향후 prebuild 재실행으로 무효화되지 않음을 확인. SHA-1: 5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25 |
+| 2026-06-07 | Google Cloud Console OAuth 클라이언트 3종 발급 완료 | 네이티브 SDK(`@react-native-google-signin/google-signin`) 구성에 필요. Android: `141896064594-irg34v9do73diqgligqmjnmoedn64tdf.apps.googleusercontent.com` / iOS: `141896064594-be152nedj9891hqmsg5r61p142jan81r.apps.googleusercontent.com` / Web(=`webClientId`, 서버 audience 검증용): `141896064594-rnpdndiq16havegudljamuv6emefi379.apps.googleusercontent.com`. Web 클라이언트는 리디렉션 URI 비워서 생성 (네이티브 idToken audience 식별자 용도이며 브라우저 리디렉션 플로우 아님). Firebase App Check는 OAuth 기능과 무관 + "Firebase Auth 도입 금지" 취지에 부합해 스킵 |
+| 2026-06-07 | TODO: Play Store 출시 시점에 Play App Signing SHA-1 재등록 필요 | 현재 등록한 SHA-1(`5E:8F:...`)은 로컬 디버그 키스토어 지문. Google Play 배포 시 Play App Signing이 앱 서명에 사용하는 별도 SHA-1/SHA-256이 발급되므로, 출시 단계에서 Google Cloud Console(Android 클라이언트)과 Kakao Developers(키 해시)에 release 지문을 추가 등록해야 함 (현재는 등록 불필요 — dev/debug 빌드 기준 진행) |
+| 2026-06-07 | TODO: App Store 출시 시점에 Google iOS OAuth 클라이언트에 App Store ID 등록 필요 | iOS 클라이언트 생성 시 Bundle ID(`com.deciduel.app`)/Team ID(`6T6KKD96D4`)는 입력했으나 App Store ID는 아직 앱 미출시로 비워둠. App Store Connect 등록 후 Google Cloud Console → 사용자 인증 정보 → 해당 iOS 클라이언트 ID 편집에서 App Store ID 추가 입력 필요 |
+| 2026-06-07 | Kakao Developers 콘솔 설정 완료 (네이티브 앱 키 + 플랫폼 등록) | 네이티브 앱 키: `ebd70c0a267863d0ff826c34cea86674` (`@react-native-kakao/core`의 `KakaoSDK.init()`에 사용). iOS 플랫폼: 번들 ID `com.deciduel.app`, Android 플랫폼: 패키지명 `com.deciduel.app` + 키 해시 `Xo8WBi6jzSxKDVR4drqm84yr9iU=`(디버그) 등록 완료 |
+| 2026-06-07 | TODO: 앱 출시 시점에 Kakao 콘솔에 Google Play 스토어 / App Store 링크(ID) 등록 필요 | 카카오 콘솔 앱 설정에 스토어 링크 입력란 존재. 현재는 미출시 상태라 비워둠 — 출시 후 양쪽 스토어 URL/ID 모두 등록 필요 |
+| 2026-06-07 | Kakao 앱 아이콘 업로드 용량 제한(~250KB) → 256×256 리사이즈본 생성 | 기존 `assets/icon.png`(1024×1024, 695KB)이 카카오 앱 아이콘 업로드 제한 초과로 거부됨. `sips -z 256 256`으로 리사이즈해 `/tmp/kakao-icon/icon-256.png`(256×256, ~58.6KB) 생성 후 콘솔에 업로드 (앱 자체 에셋은 변경하지 않음 — 업로드 전용 파일) |
+| 2026-06-07 | Kakao/Google OAuth 동의항목 = 최소 동의(로그인만), 이메일/닉네임 등 선택 동의항목 전부 미요청 | 이메일은 사용하지 않고, 닉네임은 `NicknameScreen`에서 자체 설정하므로 외부 프로필 정보가 불필요. 고유 식별자(Kakao `id`/회원번호, Google idToken `sub`)는 동의항목과 무관하게 항상 제공되어 계정 식별/병합에 충분함. 불필요한 동의 요구를 줄여 가입 전환율 향상 + 기존 dev 로그인의 "이메일 미사용·닉네임 자체 설정" 정책과 일관 |
+| 2026-06-07 | `@gorhom/bottom-sheet` 제거 | 코드베이스 어디서도 사용되지 않는 죽은 의존성. peer dep(`react-native-reanimated >=3.16`)이 미설치 상태라 `npm install` 시 react-native 버전 충돌 유발 → expo-dev-client 설치 시 `--legacy-peer-deps` 우회 필요했던 원인. 제거 후 일반 install 정상화 |
+| 2026-06-07 | Google/Kakao를 서버사이드 Authorization Code Flow → 네이티브 SDK 기반으로 재전환 | Codex [14:14] "정정" 지시(2026-06-06 결정 폐기) + 사용자 확정("좋아 시작하자"). Apple/Google/Kakao 인증 기준을 provider마다 다르게 가져가지 않기 위해 전부 네이티브 SDK(`expo-apple-authentication`/`@react-native-google-signin`/`@react-native-kakao`)로 통일. `@react-native-google-signin/google-signin`, `@react-native-kakao/{core,user}`, `expo-build-properties` 설치 + `app.json` plugins(`iosUrlScheme`, `nativeAppKey`, `authCodeHandlerActivity`, `handleKakaoOpenUrl`) 구성 |
+| 2026-06-07 | OAuth provider 네이티브 호출을 `src/utils/oauthProviders.ts`로 분리 | Codex 제안("중복 로직은 작은 모듈로 분리해도 됨") 채택. `signInWithGoogleNative`/`signInWithKakaoNative`가 각각 idToken/accessToken만 반환하고 `OAuthCancelledError`(취소, Toast 미노출)/`OAuthProviderError`(실패, Toast 노출)로 결과를 구분 — LoginScreen은 분기만 담당해 가독성 확보. `GoogleSignin.configure()`/`initializeKakaoSDK()`는 모듈 내부에서 idempotent하게 1회만 실행 (lazy, 앱 시작 지연 없음) |
+| 2026-06-07 | LoginScreen `handleGoogle`/`handleKakao` WebBrowser 플로우 → 네이티브 SDK 직접 호출로 교체, `exchangeAuthCode()`/`expo-web-browser`/`expo-linking` 제거 | Codex 지시 그대로 적용. `oauthLogin('google', { idToken })` / `oauthLogin('kakao', { accessToken })`만 호출하면 되어 서버와의 계약이 Apple과 동일해짐 (provider별 분기 단순화). 사용자 취소는 `instanceof OAuthCancelledError`로 판별해 Toast 없이 조용히 종료 |
+| 2026-06-07 | Kakao 취소/환경 오류 메시지 분리 (취소 vs KakaoTalk 미설치 vs 일반 오류) | `@react-native-kakao/user`가 표준화된 취소 에러 코드를 노출하지 않아(`code`/`message`에 "cancel" 포함 여부로 휴리스틱 판별), 미설치 등 환경 문제는 `isKakaoTalkLoginAvailable()`로 별도 확인 후 안내 문구 분기. Codex 지시("KakaoTalk 미설치/취소/SDK 오류를 구분해 메시지를 다듬는다") 반영 |
+| 2026-06-07 | `oauthProviders.ts` 단위 테스트 10개 신규 (네이티브 SDK는 jest.mock 처리) | Codex 지시 케이스(idToken/accessToken 누락 → 에러, 사용자 취소 → Toast 없는 신호) 모두 커버. `@react-native-google-signin/google-signin`·`@react-native-kakao/{core,user}`를 모듈 레벨 mock으로 대체 (실제 네이티브 모듈은 Jest Node 환경에서 로드 불가) |
+| 2026-06-07 | `expo-auth-session`/`expo-web-browser` 제거 (구 `EXPO_PUBLIC_GOOGLE_*`/`EXPO_PUBLIC_KAKAO_REST_API_KEY`는 신규 변수로 대체, 아래 항목 참고) | 네이티브 SDK 전환으로 WebBrowser 기반 OAuth 플로우가 완전히 사라져 코드베이스 어디서도 참조하지 않는 죽은 의존성이 됨 (`expo-linking`은 `expo-auth-session`의 transitive dep으로 함께 정리됨, `react-native`의 `Linking`은 `micPermission.ts`에서 별도로 계속 사용 중이라 영향 없음). 사용자 승인("불필요한 코드 잔재는 삭제해도 돼") 반영 |
+| 2026-06-07 | Google/Kakao client id·native app key를 하드코딩 → `EXPO_PUBLIC_*` env 변수 + 폴백 패턴으로 전환 | 사용자 피드백("id 값들이나 이런 부분들 env로 전부 호출해야 하는 거 아닌가? 이번만큼은 env 수정해도 돼") 반영. `client.ts`/`gameStore.ts`의 `process.env.EXPO_PUBLIC_API_BASE_URL ?? 'fallback'` 패턴과 동일하게 `oauthProviders.ts`에 `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`/`EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`/`EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY`를 추가하고 `.env`(gitignore 대상, `.env.example` 없음 — 서버와 달리 앱은 로컬 전용 설정)에 실제 값 기록. 빌드 프로필별(dev/preview/prod) 교체 가능 + 폴백 유지로 `.env` 누락 시에도 정상 동작 |
+| 2026-06-07 | 정적 `app.json` → 동적 `app.config.ts` 전환 | 위 항목에서 "`.env`를 바꿔도 `app.json`(plugins의 `nativeAppKey`/`iosUrlScheme`)은 동기화되지 않는다"는 한계를 사용자에게 설명하자 "관리에 용이할 것 같다"며 전환 승인. `ConfigContext`/`ExpoConfig` 타입(`expo/config`)으로 작성, Expo CLI가 `expo start`/`prebuild`/`EAS build` 시 `.env`를 자동 로드해 `process.env.*`를 config 평가 시점에 제공하므로 `dotenv` 패키지 불필요. `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`로부터 `iosUrlScheme`(`com.googleusercontent.apps.<prefix>`)을 정규식으로 동적 계산, `EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY`를 `nativeAppKey`에 그대로 연결 — `oauthProviders.ts` 런타임 값과 `.env` 한 곳만 수정하면 자동 동기화됨. `npx expo config --type public/prebuild`로 변환 전후 결과값(`bundleIdentifier`/`package`/`plugins` 전체)이 동일함을 확인 후 `app.json` 삭제 |
+| 2026-06-07 | `SettingsScreen.tsx`의 `import appJson from '../../../app.json'` → `expo-constants`(`Constants.expoConfig?.version`)로 교체 | `app.config.ts` 전환으로 정적 JSON import가 깨짐(TS2307). 정적/동적 설정 어느 쪽이든 일관되게 동작하는 Expo 표준 방식인 `expo-constants`로 런타임 조회하도록 변경 (직접 의존성으로 `npx expo install expo-constants` 추가, 이미 `expo` SDK에 번들되어 있던 패키지를 명시적 dependency로 승격) |

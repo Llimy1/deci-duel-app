@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -12,10 +12,11 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { C, FONTS, FS, S, R } from '../../theme';
 import { Av } from '../../components/ui';
 import { useAppStore } from '../../store';
-import { fetchMe, pickAndUploadProfileImage } from '../../api/me';
+import { pickAndUploadProfileImage } from '../../api/me';
 import type { ProfileStackParamList } from '../../navigation/types';
 import { Toast } from '../../utils/toast';
 import { getErrorMessage } from '../../utils/errorHandler';
+import { fetchMeWithRetry } from '../../utils/profileHydration';
 
 type Props = NativeStackScreenProps<ProfileStackParamList, 'Profile'>;
 
@@ -24,11 +25,34 @@ export default function ProfileScreen({ navigation }: Props) {
   const avatarColor = useAppStore((s) => s.avatarColor);
   const setMe = useAppStore((s) => s.setMe);
   const setProfileImageUrl = useAppStore((s) => s.setProfileImageUrl);
+  const [profileLoadFailed, setProfileLoadFailed] = useState(false);
+  const [isRetryingProfile, setIsRetryingProfile] = useState(false);
+  const profileLoadingRef = useRef(false);
+
+  const refreshProfile = useCallback(async (showToast = false) => {
+    if (profileLoadingRef.current) return;
+    profileLoadingRef.current = true;
+    setIsRetryingProfile(true);
+    try {
+      const me = await fetchMeWithRetry();
+      setMe(me);
+      setProfileLoadFailed(false);
+      if (showToast) Toast.success('프로필 정보를 다시 불러왔습니다.');
+    } catch {
+      setProfileLoadFailed(true);
+      if (showToast) {
+        Toast.error('프로필 정보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
+      }
+    } finally {
+      profileLoadingRef.current = false;
+      setIsRetryingProfile(false);
+    }
+  }, [setMe]);
 
   useFocusEffect(
     useCallback(() => {
-      fetchMe().then(setMe).catch(() => {});
-    }, [setMe])
+      refreshProfile();
+    }, [refreshProfile])
   );
 
   const links = [
@@ -58,6 +82,25 @@ export default function ProfileScreen({ navigation }: Props) {
           <Text style={styles.userName}>{user.name}</Text>
           <Text style={styles.bestDb}>{user.bestDb > 0 ? `${user.bestDb.toFixed(2)} dB` : '기록 없음'}</Text>
         </View>
+
+        {profileLoadFailed && (
+          <Pressable
+            onPress={() => refreshProfile(true)}
+            disabled={isRetryingProfile}
+            style={({ pressed }) => [
+              styles.retryPanel,
+              { opacity: pressed || isRetryingProfile ? 0.78 : 1 },
+            ]}
+          >
+            <View style={styles.retryTextWrap}>
+              <Text style={styles.retryTitle}>프로필 정보를 불러오지 못했습니다.</Text>
+              <Text style={styles.retrySub}>내 기록과 프로필을 다시 가져옵니다.</Text>
+            </View>
+            <Text style={styles.retryAction}>
+              {isRetryingProfile ? '불러오는 중' : '다시 불러오기'}
+            </Text>
+          </Pressable>
+        )}
 
         <View style={styles.linkList}>
           {links.map((l) => (
@@ -107,6 +150,37 @@ const styles = StyleSheet.create({
     fontSize: FS.sm,
     color: C.textDim,
     marginTop: S[1],
+  },
+  retryPanel: {
+    marginHorizontal: S[5],
+    paddingHorizontal: S[4],
+    paddingVertical: S[3],
+    borderRadius: R.md,
+    borderWidth: 1,
+    borderColor: `${C.yellow}88`,
+    backgroundColor: `${C.yellow}14`,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S[3],
+  },
+  retryTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  retryTitle: {
+    fontFamily: FONTS.bodyBold,
+    fontSize: FS.sm,
+    color: C.text,
+  },
+  retrySub: {
+    fontFamily: FONTS.body,
+    fontSize: FS.xs,
+    color: C.textDim,
+  },
+  retryAction: {
+    fontFamily: FONTS.monoBold,
+    fontSize: FS.xs,
+    color: C.yellow,
   },
   linkList: {
     marginHorizontal: S[5],
