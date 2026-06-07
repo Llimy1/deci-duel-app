@@ -4,7 +4,7 @@
 2026-06-07
 
 ## 현재 상태
-Apple/Google/Kakao OAuth를 전부 **네이티브 SDK 기반**으로 통일 완료 (Codex [14:14] "정정" 지시 반영 — 2026-06-06의 서버사이드 Authorization Code Flow 결정 폐기). 서버 `POST /auth/oauth`가 Apple/Google idToken, Kakao accessToken을 공통으로 검증하며 audience(`aud`) 검증을 추가했고, 앱은 `@react-native-google-signin/google-signin` + `@react-native-kakao/{core,user}`로 LoginScreen을 재작성했다 (`src/utils/oauthProviders.ts` 헬퍼 모듈 신규). 서버/앱 빌드·테스트 전부 통과 (서버 142/142, 앱 113/113). 다음 단계는 dev client 재빌드(`npx expo run:ios`/`run:android`) 후 실기기 E2E QA. Phase B(효과음/햅틱, 딥링크, i18n)는 OAuth QA 이후 진행한다.
+Apple/Google/Kakao OAuth를 전부 **네이티브 SDK 기반**으로 통일 완료 (Codex [14:14] "정정" 지시 반영 — 2026-06-06의 서버사이드 Authorization Code Flow 결정 폐기). 서버 `POST /auth/oauth`가 Apple/Google idToken, Kakao accessToken을 공통으로 검증하며 audience(`aud`) 검증을 추가했고, 앱은 `@react-native-google-signin/google-signin` + `@react-native-kakao/{core,user}`로 LoginScreen을 재작성했다 (`src/utils/oauthProviders.ts` 헬퍼 모듈 신규). 서버/앱 빌드·테스트 전부 통과 (서버 142/142, 앱 121/121). 다음 단계는 dev client 재빌드(`npx expo run:ios`/`run:android`) 후 실기기 E2E QA. Phase B(효과음/햅틱, 딥링크, i18n)는 OAuth QA 이후 진행한다.
 
 ## 완료된 작업
 
@@ -407,15 +407,15 @@ Codex [2026-06-07 14:14] "정정 — Google/Kakao도 네이티브 SDK 기준으�
 
 ### 앱 (`deci-duel-app`)
 - **패키지 추가**: `@react-native-google-signin/google-signin`, `@react-native-kakao/{core,user}`, `expo-build-properties` (+ 기존 `expo-dev-client`, `eas.json` 재사용)
-- **`app.json` plugins 구성**: `@react-native-google-signin/google-signin`(`iosUrlScheme: com.googleusercontent.apps.<iOS Client ID prefix>`), `@react-native-kakao/core`(`nativeAppKey`, `android.authCodeHandlerActivity`, `ios.handleKakaoOpenUrl`), `expo-build-properties`
+- **`app.config.ts` plugins 구성**: `@react-native-google-signin/google-signin`(`iosUrlScheme: com.googleusercontent.apps.<iOS Client ID prefix>`), `@react-native-kakao/core`(`nativeAppKey`, `android.authCodeHandlerActivity`, `ios.handleKakaoOpenUrl`), `expo-build-properties`
 - **`src/utils/oauthProviders.ts` 신규**: `signInWithGoogleNative()`/`signInWithKakaoNative()` — 각각 idToken/accessToken만 반환. `GoogleSignin.configure()`/`initializeKakaoSDK()`를 모듈 내부에서 idempotent 1회 lazy 초기화. `OAuthCancelledError`(취소)/`OAuthProviderError`(실패) 구분으로 LoginScreen의 Toast 분기를 단순화
 - **`LoginScreen.tsx`**: `handleGoogle`/`handleKakao`를 `WebBrowser.openAuthSessionAsync` + `Linking` 패턴에서 `signInWithGoogleNative`/`signInWithKakaoNative` 직접 호출로 교체. `expo-web-browser`/`expo-linking`/`WebBrowser.maybeCompleteAuthSession()` 제거. 취소는 `instanceof OAuthCancelledError`로 판별해 Toast 미노출
 - **`src/api/oauth.ts`**: `exchangeAuthCode()` 제거 (`oauthLogin`/`completeOAuthSignup`만 유지)
 - **`src/utils/__tests__/oauthProviders.test.ts` 신규**: idToken/accessToken 누락, 사용자 취소(Toast 미노출 신호), Google `PLAY_SERVICES_NOT_AVAILABLE`, Kakao 카카오톡 미설치/일반 SDK 오류 등 10개 테스트 — 네이티브 SDK는 `jest.mock`으로 대체
-- 검증: `npx tsc --noEmit` 통과, `npx jest --runInBand` **113/113 통과**
+- 검증: `npx tsc --noEmit` 통과, `npx jest --runInBand` **121/121 통과**
 
 ## 진행 중인 작업
-- **dev client 재빌드 필요**: 네이티브 설정(`app.json` plugins) 변경으로 `npx expo run:ios` / `npx expo run:android` 재실행 후 실기기 OAuth E2E QA
+- **dev client 재빌드 필요**: 네이티브 설정(`app.config.ts` plugins) 변경으로 `npx expo run:ios` / `npx expo run:android` 재실행 후 실기기 OAuth E2E QA
 - Apple Sign In: 개발 빌드 환경에서 테스트 필요 (네이티브 SDK 전환과 무관하게 기존 유지)
 - `docs/CLAUDE_TO_CODEX.md`에 완료 보고 작성 예정 (Codex "완료 보고" 체크리스트 기준)
 - Phase B 앱 완성도(효과음/햅틱, 딥링크, i18n)는 OAuth QA 이후 진행
@@ -529,7 +529,7 @@ Codex [2026-06-07 14:14] "정정 — Google/Kakao도 네이티브 SDK 기준으�
 | 2026-06-07 | Kakao 앱 아이콘 업로드 용량 제한(~250KB) → 256×256 리사이즈본 생성 | 기존 `assets/icon.png`(1024×1024, 695KB)이 카카오 앱 아이콘 업로드 제한 초과로 거부됨. `sips -z 256 256`으로 리사이즈해 `/tmp/kakao-icon/icon-256.png`(256×256, ~58.6KB) 생성 후 콘솔에 업로드 (앱 자체 에셋은 변경하지 않음 — 업로드 전용 파일) |
 | 2026-06-07 | Kakao/Google OAuth 동의항목 = 최소 동의(로그인만), 이메일/닉네임 등 선택 동의항목 전부 미요청 | 이메일은 사용하지 않고, 닉네임은 `NicknameScreen`에서 자체 설정하므로 외부 프로필 정보가 불필요. 고유 식별자(Kakao `id`/회원번호, Google idToken `sub`)는 동의항목과 무관하게 항상 제공되어 계정 식별/병합에 충분함. 불필요한 동의 요구를 줄여 가입 전환율 향상 + 기존 dev 로그인의 "이메일 미사용·닉네임 자체 설정" 정책과 일관 |
 | 2026-06-07 | `@gorhom/bottom-sheet` 제거 | 코드베이스 어디서도 사용되지 않는 죽은 의존성. peer dep(`react-native-reanimated >=3.16`)이 미설치 상태라 `npm install` 시 react-native 버전 충돌 유발 → expo-dev-client 설치 시 `--legacy-peer-deps` 우회 필요했던 원인. 제거 후 일반 install 정상화 |
-| 2026-06-07 | Google/Kakao를 서버사이드 Authorization Code Flow → 네이티브 SDK 기반으로 재전환 | Codex [14:14] "정정" 지시(2026-06-06 결정 폐기) + 사용자 확정("좋아 시작하자"). Apple/Google/Kakao 인증 기준을 provider마다 다르게 가져가지 않기 위해 전부 네이티브 SDK(`expo-apple-authentication`/`@react-native-google-signin`/`@react-native-kakao`)로 통일. `@react-native-google-signin/google-signin`, `@react-native-kakao/{core,user}`, `expo-build-properties` 설치 + `app.json` plugins(`iosUrlScheme`, `nativeAppKey`, `authCodeHandlerActivity`, `handleKakaoOpenUrl`) 구성 |
+| 2026-06-07 | Google/Kakao를 서버사이드 Authorization Code Flow → 네이티브 SDK 기반으로 재전환 | Codex [14:14] "정정" 지시(2026-06-06 결정 폐기) + 사용자 확정("좋아 시작하자"). Apple/Google/Kakao 인증 기준을 provider마다 다르게 가져가지 않기 위해 전부 네이티브 SDK(`expo-apple-authentication`/`@react-native-google-signin`/`@react-native-kakao`)로 통일. `@react-native-google-signin/google-signin`, `@react-native-kakao/{core,user}`, `expo-build-properties` 설치 + `app.config.ts` plugins(`iosUrlScheme`, `nativeAppKey`, `authCodeHandlerActivity`, `handleKakaoOpenUrl`) 구성 |
 | 2026-06-07 | OAuth provider 네이티브 호출을 `src/utils/oauthProviders.ts`로 분리 | Codex 제안("중복 로직은 작은 모듈로 분리해도 됨") 채택. `signInWithGoogleNative`/`signInWithKakaoNative`가 각각 idToken/accessToken만 반환하고 `OAuthCancelledError`(취소, Toast 미노출)/`OAuthProviderError`(실패, Toast 노출)로 결과를 구분 — LoginScreen은 분기만 담당해 가독성 확보. `GoogleSignin.configure()`/`initializeKakaoSDK()`는 모듈 내부에서 idempotent하게 1회만 실행 (lazy, 앱 시작 지연 없음) |
 | 2026-06-07 | LoginScreen `handleGoogle`/`handleKakao` WebBrowser 플로우 → 네이티브 SDK 직접 호출로 교체, `exchangeAuthCode()`/`expo-web-browser`/`expo-linking` 제거 | Codex 지시 그대로 적용. `oauthLogin('google', { idToken })` / `oauthLogin('kakao', { accessToken })`만 호출하면 되어 서버와의 계약이 Apple과 동일해짐 (provider별 분기 단순화). 사용자 취소는 `instanceof OAuthCancelledError`로 판별해 Toast 없이 조용히 종료 |
 | 2026-06-07 | Kakao 취소/환경 오류 메시지 분리 (취소 vs KakaoTalk 미설치 vs 일반 오류) | `@react-native-kakao/user`가 표준화된 취소 에러 코드를 노출하지 않아(`code`/`message`에 "cancel" 포함 여부로 휴리스틱 판별), 미설치 등 환경 문제는 `isKakaoTalkLoginAvailable()`로 별도 확인 후 안내 문구 분기. Codex 지시("KakaoTalk 미설치/취소/SDK 오류를 구분해 메시지를 다듬는다") 반영 |
