@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
-  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -11,6 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -282,11 +282,11 @@ export default function SettingsScreen({ navigation }: Props) {
           <InfoRow label="버전" value={appVersion} />
           <SettingsRow
             label="이용약관"
-            onPress={() => Linking.openURL('https://deciduel.com/terms')}
+            onPress={() => WebBrowser.openBrowserAsync('https://deciduel.com/terms')}
           />
           <SettingsRow
             label="개인정보처리방침"
-            onPress={() => Linking.openURL('https://deciduel.com/privacy')}
+            onPress={() => WebBrowser.openBrowserAsync('https://deciduel.com/privacy')}
             isLast
           />
         </Section>

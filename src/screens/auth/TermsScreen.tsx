@@ -5,9 +5,9 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Linking,
   useWindowDimensions,
 } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { C, FONTS, FS, S, R } from '../../theme';
@@ -25,11 +25,11 @@ export default function TermsScreen({ navigation }: Props) {
   const canContinue = termsAgreed && privacyAgreed;
 
   const handleViewTerms = () => {
-    Linking.openURL('https://deciduel.com/terms');
+    WebBrowser.openBrowserAsync('https://deciduel.com/terms');
   };
 
   const handleViewPrivacy = () => {
-    Linking.openURL('https://deciduel.com/privacy');
+    WebBrowser.openBrowserAsync('https://deciduel.com/privacy');
   };
 
   const handleAgreeAll = () => {

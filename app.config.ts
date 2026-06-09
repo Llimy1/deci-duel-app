@@ -82,6 +82,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       },
     ],
     'expo-secure-store',
+    'expo-web-browser',
     [
       '@react-native-google-signin/google-signin',
       {
