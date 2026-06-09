@@ -25,11 +25,11 @@ export default function TermsScreen({ navigation }: Props) {
   const canContinue = termsAgreed && privacyAgreed;
 
   const handleViewTerms = () => {
-    WebBrowser.openBrowserAsync('https://deciduel.com/terms');
+    WebBrowser.openBrowserAsync('https://deciduel.com/legal/terms');
   };
 
   const handleViewPrivacy = () => {
-    WebBrowser.openBrowserAsync('https://deciduel.com/privacy');
+    WebBrowser.openBrowserAsync('https://deciduel.com/legal/privacy');
   };
 
   const handleAgreeAll = () => {

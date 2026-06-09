@@ -282,11 +282,11 @@ export default function SettingsScreen({ navigation }: Props) {
           <InfoRow label="버전" value={appVersion} />
           <SettingsRow
             label="이용약관"
-            onPress={() => WebBrowser.openBrowserAsync('https://deciduel.com/terms')}
+            onPress={() => WebBrowser.openBrowserAsync('https://deciduel.com/legal/terms')}
           />
           <SettingsRow
             label="개인정보처리방침"
-            onPress={() => WebBrowser.openBrowserAsync('https://deciduel.com/privacy')}
+            onPress={() => WebBrowser.openBrowserAsync('https://deciduel.com/legal/privacy')}
             isLast
           />
         </Section>
