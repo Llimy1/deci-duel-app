@@ -5,7 +5,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Alert,
+  Linking,
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -25,11 +25,11 @@ export default function TermsScreen({ navigation }: Props) {
   const canContinue = termsAgreed && privacyAgreed;
 
   const handleViewTerms = () => {
-    Alert.alert('이용약관', '이용약관 페이지는 준비 중이에요.');
+    Linking.openURL('https://deciduel.com/terms');
   };
 
   const handleViewPrivacy = () => {
-    Alert.alert('개인정보처리방침', '개인정보처리방침 페이지는 준비 중이에요.');
+    Linking.openURL('https://deciduel.com/privacy');
   };
 
   const handleAgreeAll = () => {

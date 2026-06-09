@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -281,15 +282,11 @@ export default function SettingsScreen({ navigation }: Props) {
           <InfoRow label="버전" value={appVersion} />
           <SettingsRow
             label="이용약관"
-            onPress={() => {
-              // TODO: 관리자 웹의 이용약관 페이지가 준비되면 연결한다.
-            }}
+            onPress={() => Linking.openURL('https://deciduel.com/terms')}
           />
           <SettingsRow
             label="개인정보처리방침"
-            onPress={() => {
-              // TODO: 관리자 웹의 개인정보처리방침 페이지가 준비되면 연결한다.
-            }}
+            onPress={() => Linking.openURL('https://deciduel.com/privacy')}
             isLast
           />
         </Section>
