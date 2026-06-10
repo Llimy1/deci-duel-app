@@ -1,9 +1,14 @@
 import React from 'react';
-import { Text } from 'react-native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { StyleSheet, Text, View } from 'react-native';
+import {
+  BottomTabBar,
+  type BottomTabBarProps,
+  createBottomTabNavigator,
+} from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../theme';
+import AdBanner from '../components/AdBanner';
 
 import type {
   RootStackParamList,
@@ -52,6 +57,29 @@ const SCREEN_OPT = {
   headerShown: false,
   contentStyle: { backgroundColor: C.bg },
 };
+
+function getFocusedNestedRouteName(route: BottomTabBarProps['state']['routes'][number]) {
+  const nestedState = route.state;
+  if (!nestedState || nestedState.index == null) return undefined;
+  return nestedState.routes[nestedState.index]?.name;
+}
+
+function shouldShowMainTabAd(props: BottomTabBarProps) {
+  const activeRoute = props.state.routes[props.state.index];
+  const nestedRouteName = getFocusedNestedRouteName(activeRoute);
+
+  if (nestedRouteName === 'SoloMeasure') return false;
+  return ['HomeTab', 'DiaryTab', 'RankingTab', 'ProfileTab'].includes(activeRoute.name);
+}
+
+function MainTabBar(props: BottomTabBarProps) {
+  return (
+    <View style={styles.tabBarWrap}>
+      {shouldShowMainTabAd(props) && <AdBanner placement="main-tab-bottom" />}
+      <BottomTabBar {...props} />
+    </View>
+  );
+}
 
 function HomeStackNav() {
   return (
@@ -112,6 +140,7 @@ function MainTabs() {
           marginBottom: 0,
         },
       }}
+      tabBar={(props) => <MainTabBar {...props} />}
     >
       <Tab.Screen
         name="HomeTab"
@@ -154,6 +183,12 @@ function MainTabs() {
     </Tab.Navigator>
   );
 }
+
+const styles = StyleSheet.create({
+  tabBarWrap: {
+    backgroundColor: C.bg,
+  },
+});
 
 export default function MainNavigator() {
   return (

@@ -6,17 +6,17 @@ import {
   useForeground,
 } from 'react-native-google-mobile-ads';
 import { C, S } from '../theme';
-import { getProfileBannerAdUnitId } from '../config/adMob';
+import { getMainTabBannerAdUnitId } from '../config/adMob';
 
 interface AdBannerProps {
-  placement: 'profile-bottom';
+  placement: 'main-tab-bottom';
   style?: ViewStyle;
 }
 
 export default function AdBanner({ placement, style }: AdBannerProps) {
   const bannerRef = useRef<BannerAd>(null);
   const [hasFailed, setHasFailed] = useState(false);
-  const unitId = placement === 'profile-bottom' ? getProfileBannerAdUnitId() : null;
+  const unitId = placement === 'main-tab-bottom' ? getMainTabBannerAdUnitId() : null;
 
   useForeground(() => {
     if (Platform.OS === 'ios' && !hasFailed) {
