@@ -13,7 +13,6 @@ export type AuthStackParamList = {
 
 export type HomeStackParamList = {
   Home: undefined;
-  SoloMeasure: { diaryMode?: boolean } | undefined;
 };
 
 export type GameStackParamList = {
@@ -33,7 +32,6 @@ export type GameStackParamList = {
 export type DiaryStackParamList = {
   Calendar: undefined;
   DayDetail: { date: string };
-  SoloMeasure: { diaryMode?: boolean } | undefined;
 };
 
 export type RankingStackParamList = {
@@ -56,7 +54,10 @@ export type MainTabParamList = {
 };
 
 export type RootStackParamList =
-  { MainTabs: NavigatorScreenParams<MainTabParamList> | undefined } &
+  {
+    MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
+    SoloMeasure: { diaryMode?: boolean } | undefined;
+  } &
   AuthStackParamList &
   HomeStackParamList &
   GameStackParamList &

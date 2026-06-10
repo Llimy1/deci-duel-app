@@ -78,6 +78,14 @@ export default function CalendarScreen({ navigation }: Props) {
     if (month === 11) { setYear(y => y + 1); setMonth(0); }
     else setMonth(m => m + 1);
   };
+  const openSoloMeasure = () => {
+    const rootNavigation = navigation.getParent()?.getParent();
+    if (rootNavigation) {
+      (rootNavigation.navigate as any)('SoloMeasure', { diaryMode: true });
+      return;
+    }
+    (navigation.navigate as any)('SoloMeasure', { diaryMode: true });
+  };
 
   // Stats
   const monthEntries = Object.entries(entries).filter(([k]) => {
@@ -221,7 +229,10 @@ export default function CalendarScreen({ navigation }: Props) {
 
       </ScrollView>
 
-      <Pressable style={styles.fab} onPress={() => navigation.navigate('SoloMeasure', { diaryMode: true })}>
+      <Pressable
+        style={styles.fab}
+        onPress={openSoloMeasure}
+      >
         <Text style={styles.fabText}>기록</Text>
       </Pressable>
 

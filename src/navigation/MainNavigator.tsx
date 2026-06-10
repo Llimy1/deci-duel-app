@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import {
   BottomTabBar,
   type BottomTabBarProps,
@@ -85,7 +86,6 @@ function HomeStackNav() {
   return (
     <HomeStack.Navigator screenOptions={{ ...SCREEN_OPT, animation: 'fade_from_bottom' }}>
       <HomeStack.Screen name="Home" component={HomeScreen} />
-      <HomeStack.Screen name="SoloMeasure" component={SoloMeasureScreen} options={{ animation: 'slide_from_bottom' }} />
     </HomeStack.Navigator>
   );
 }
@@ -95,7 +95,6 @@ function DiaryStackNav() {
     <DiaryStack.Navigator screenOptions={SCREEN_OPT}>
       <DiaryStack.Screen name="Calendar" component={CalendarScreen} />
       <DiaryStack.Screen name="DayDetail" component={DayDetailScreen} options={{ animation: 'slide_from_right' }} />
-      <DiaryStack.Screen name="SoloMeasure" component={SoloMeasureScreen} options={{ animation: 'slide_from_bottom' }} />
     </DiaryStack.Navigator>
   );
 }
@@ -153,7 +152,9 @@ function MainTabs() {
         })}
         options={{
           tabBarLabel: '홈',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🔥</Text>,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'flash' : 'flash-outline'} size={22} color={color} />
+          ),
         }}
       />
       <Tab.Screen
@@ -161,7 +162,9 @@ function MainTabs() {
         component={DiaryStackNav}
         options={{
           tabBarLabel: '다이어리',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>📖</Text>,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'book' : 'book-outline'} size={22} color={color} />
+          ),
         }}
       />
       <Tab.Screen
@@ -169,7 +172,9 @@ function MainTabs() {
         component={RankingStackNav}
         options={{
           tabBarLabel: '랭킹',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🏆</Text>,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'trophy' : 'trophy-outline'} size={22} color={color} />
+          ),
         }}
       />
       <Tab.Screen
@@ -177,7 +182,9 @@ function MainTabs() {
         component={ProfileStackNav}
         options={{
           tabBarLabel: '프로필',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>👤</Text>,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'person-circle' : 'person-circle-outline'} size={22} color={color} />
+          ),
         }}
       />
     </Tab.Navigator>
@@ -194,6 +201,7 @@ export default function MainNavigator() {
   return (
     <RootStack.Navigator screenOptions={SCREEN_OPT}>
       <RootStack.Screen name="MainTabs" component={MainTabs} />
+      <RootStack.Screen name="SoloMeasure" component={SoloMeasureScreen} options={{ animation: 'slide_from_bottom' }} />
       <RootStack.Screen name="DuelLobby" component={DuelLobbyScreen} options={{ animation: 'slide_from_right' }} />
       <RootStack.Screen name="WaitingRoom" component={WaitingRoomScreen} options={{ animation: 'slide_from_right' }} />
       <RootStack.Screen name="MatchFound" component={MatchFoundScreen} options={{ animation: 'fade' }} />

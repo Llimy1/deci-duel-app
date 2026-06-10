@@ -5,7 +5,7 @@ import {
   BannerAdSize,
   useForeground,
 } from 'react-native-google-mobile-ads';
-import { C, S } from '../theme';
+import { C } from '../theme';
 import { getMainTabBannerAdUnitId } from '../config/adMob';
 
 interface AdBannerProps {
@@ -42,7 +42,6 @@ const styles = StyleSheet.create({
   wrap: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: S[3],
     borderTopWidth: 1,
     borderTopColor: `${C.line}88`,
   },

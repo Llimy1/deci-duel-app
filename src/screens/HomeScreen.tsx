@@ -59,6 +59,15 @@ export default function HomeScreen({ navigation }: Props) {
     }, [refreshProfile])
   );
 
+  const openSoloMeasure = () => {
+    const rootNavigation = navigation.getParent()?.getParent();
+    if (rootNavigation) {
+      (rootNavigation.navigate as any)('SoloMeasure');
+      return;
+    }
+    navigation.navigate('SoloMeasure');
+  };
+
   return (
     <StageBg>
       <ScrollView
@@ -149,7 +158,7 @@ export default function HomeScreen({ navigation }: Props) {
             title="솔로 측정"
             sub="내 데시벨 측정"
             color={C.yellow}
-            onPress={() => navigation.navigate('SoloMeasure')}
+            onPress={openSoloMeasure}
           />
         </View>
 

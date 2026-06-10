@@ -15,13 +15,12 @@ import { createSoloRecord, getSoloRecord } from '../api/soloRecord';
 import { showErrorAlert } from '../utils/errorHandler';
 import { requireMicPermission } from '../utils/micPermission';
 import { Toast } from '../utils/toast';
-import type { DiaryStackParamList, HomeStackParamList } from '../navigation/types';
+import type { RootStackParamList } from '../navigation/types';
 
 const MEASURE_DURATION = 5.0;
 
 type Phase = 'ready' | 'measuring' | 'done';
-type SoloMeasureParamList = HomeStackParamList & DiaryStackParamList;
-type Props = NativeStackScreenProps<SoloMeasureParamList, 'SoloMeasure'>;
+type Props = NativeStackScreenProps<RootStackParamList, 'SoloMeasure'>;
 
 export default function SoloMeasureScreen({ navigation, route }: Props) {
   const { top, bottom } = useSafeAreaInsets();
@@ -204,22 +203,22 @@ export default function SoloMeasureScreen({ navigation, route }: Props) {
     });
   };
 
+  const closeScreen = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.navigate('MainTabs', { screen: 'HomeTab', params: { screen: 'Home' } });
+  };
+
   const openDiary = () => {
     setDiarySavedToastVisible(false);
-    const parent = navigation.getParent();
-    if (parent) {
-      (parent.navigate as any)('DiaryTab', { screen: 'Calendar' });
-    }
+    navigation.navigate('MainTabs', { screen: 'DiaryTab', params: { screen: 'Calendar' } });
   };
 
   const openHome = () => {
     setDiarySavedToastVisible(false);
-    const parent = navigation.getParent();
-    if (parent) {
-      (parent.navigate as any)('HomeTab', { screen: 'Home' });
-      return;
-    }
-    navigation.navigate('Home');
+    navigation.navigate('MainTabs', { screen: 'HomeTab', params: { screen: 'Home' } });
   };
 
   return (
@@ -257,7 +256,7 @@ export default function SoloMeasureScreen({ navigation, route }: Props) {
 
       {/* Header */}
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
+        <Pressable onPress={closeScreen} style={styles.backBtn}>
           <Text style={styles.backText}>✕</Text>
         </Pressable>
         <Text style={styles.title}>솔로 측정</Text>
