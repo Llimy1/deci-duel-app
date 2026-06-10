@@ -21,6 +21,7 @@ import {
   JetBrainsMono_700Bold,
 } from '@expo-google-fonts/jetbrains-mono';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import mobileAds from 'react-native-google-mobile-ads';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppStore } from './src/store';
@@ -63,6 +64,10 @@ export default function App() {
   const isLoggedIn = useAppStore((s) => s.isLoggedIn);
   const restoreSession = useAppStore((s) => s.restoreSession);
   const setMe = useAppStore((s) => s.setMe);
+
+  useEffect(() => {
+    mobileAds().initialize().catch(() => {});
+  }, []);
 
   useEffect(() => {
     async function restoreAuth() {

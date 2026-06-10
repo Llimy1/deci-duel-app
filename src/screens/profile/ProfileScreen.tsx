@@ -11,6 +11,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { C, FONTS, FS, S, R } from '../../theme';
 import { Av } from '../../components/ui';
+import AdBanner from '../../components/AdBanner';
 import { useAppStore } from '../../store';
 import { pickAndUploadProfileImage } from '../../api/me';
 import type { ProfileStackParamList } from '../../navigation/types';
@@ -119,6 +120,8 @@ export default function ProfileScreen({ navigation }: Props) {
             <Text style={styles.linkArrow}>›</Text>
           </Pressable>
         </View>
+
+        <AdBanner placement="profile-bottom" style={styles.profileAd} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -201,6 +204,9 @@ const styles = StyleSheet.create({
   },
   logoutItem: {
     borderBottomWidth: 0,
+  },
+  profileAd: {
+    marginHorizontal: S[5],
   },
   linkText: {
     fontFamily: FONTS.headBold,

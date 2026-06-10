@@ -32,6 +32,13 @@ const GOOGLE_IOS_URL_SCHEME = `com.googleusercontent.apps.${GOOGLE_IOS_CLIENT_ID
 const KAKAO_NATIVE_APP_KEY =
   process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY ?? 'ebd70c0a267863d0ff826c34cea86674';
 
+// AdMob App ID. 실제 배포 전 AdMob 콘솔의 앱별 App ID로 교체해야 한다.
+// 개발/로컬 빌드에서는 Google 공식 테스트 App ID를 사용해 SDK 초기화만 검증한다.
+const ADMOB_IOS_APP_ID =
+  process.env.ADMOB_IOS_APP_ID ?? 'ca-app-pub-3940256099942544~1458002511';
+const ADMOB_ANDROID_APP_ID =
+  process.env.ADMOB_ANDROID_APP_ID ?? 'ca-app-pub-3940256099942544~3347511713';
+
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'DeciDuel',
@@ -99,6 +106,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         ios: {
           handleKakaoOpenUrl: true,
         },
+      },
+    ],
+    [
+      'react-native-google-mobile-ads',
+      {
+        iosAppId: ADMOB_IOS_APP_ID,
+        androidAppId: ADMOB_ANDROID_APP_ID,
       },
     ],
     [
