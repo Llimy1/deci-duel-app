@@ -52,10 +52,17 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   splash: {
     backgroundColor: '#0a0612',
   },
+  updates: {
+    url: 'https://u.expo.dev/8da7ed01-5758-463a-b552-6f4dec56d474',
+  },
+  runtimeVersion: {
+    policy: 'appVersion',
+  },
   ios: {
     supportsTablet: false,
     usesAppleSignIn: true,
     infoPlist: {
+      ITSAppUsesNonExemptEncryption: false,
       NSMicrophoneUsageDescription: 'DeciDuel은 데시벨 대결을 위해 마이크를 사용합니다.',
       NSPhotoLibraryUsageDescription:
         'DeciDuel은 프로필 이미지를 설정하기 위해 사진 보관함에 접근합니다.',
