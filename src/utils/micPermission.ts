@@ -1,5 +1,7 @@
 import { Alert, Linking } from 'react-native';
-import { Audio } from 'expo-av';
+// expo-av Audio.getPermissionsAsync()는 iOS 17+에서 deprecated된
+// AVAudioSession.recordPermission을 사용해 권한 변경 후에도 stale한 값을 반환할 수 있다.
+import { getRecordingPermissionsAsync } from 'expo-audio';
 
 /**
  * 마이크 권한이 있으면 true 반환.
@@ -10,7 +12,7 @@ import { Audio } from 'expo-av';
  * - Android: 영구 거부 이후 동일하게 Settings 유도
  */
 export async function requireMicPermission(): Promise<boolean> {
-  const { granted } = await Audio.getPermissionsAsync();
+  const { granted } = await getRecordingPermissionsAsync();
   if (granted) return true;
 
   Alert.alert(

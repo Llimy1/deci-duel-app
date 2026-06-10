@@ -13,6 +13,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { C, FONTS, FS, S, R } from '../../theme';
 import { Av } from '../../components/ui';
 import { useAppStore } from '../../store';
+import { saveTokens } from '../../utils/secureStorage';
 import { completeOAuthSignup } from '../../api/oauth';
 import {
   generateAndUploadRandomProfileImage,
@@ -20,7 +21,6 @@ import {
   ProfileImageAsset,
   uploadProfileImageFromUri,
 } from '../../api/me';
-import { saveTokens } from '../../utils/secureStorage';
 import { getErrorMessage } from '../../utils/errorHandler';
 import { Toast } from '../../utils/toast';
 import type { AuthStackParamList } from '../../navigation/types';

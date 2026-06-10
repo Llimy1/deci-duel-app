@@ -18,18 +18,20 @@ import {
 import { initializeKakaoSDK } from '@react-native-kakao/core';
 import { login as kakaoNativeLogin, isKakaoTalkLoginAvailable } from '@react-native-kakao/user';
 
-function envValue(name: string): string | null {
-  const value = process.env[name]?.trim();
-  return value ? value : null;
+function clean(value?: string): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
 }
 
 // Google Cloud Console에서 발급받은 OAuth 클라이언트 ID (서버 GOOGLE_ALLOWED_CLIENT_IDS와 동일 세트).
 // EXPO_PUBLIC_* 환경변수로 빌드 프로필별(dev/preview/prod) 교체 가능 — client.ts의 API_BASE_URL과 동일 패턴.
-const GOOGLE_WEB_CLIENT_ID = envValue('EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID');
-const GOOGLE_IOS_CLIENT_ID = envValue('EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID');
+// 주의: babel-plugin-transform-inline-environment-variables는 process.env.EXPO_PUBLIC_XXX 형태의
+// 정적 멤버 접근만 인라이닝한다. process.env[name] 같은 동적 접근은 프로덕션 번들에서 항상 undefined가 된다.
+const GOOGLE_WEB_CLIENT_ID = clean(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID);
+const GOOGLE_IOS_CLIENT_ID = clean(process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID);
 
 // Kakao Developers에 등록된 네이티브 앱 키. app.config.ts 플러그인 설정의 nativeAppKey와 반드시 동일해야 한다.
-const KAKAO_NATIVE_APP_KEY = envValue('EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY');
+const KAKAO_NATIVE_APP_KEY = clean(process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY);
 
 let googleConfigured = false;
 let kakaoSdkInitPromise: Promise<void> | null = null;

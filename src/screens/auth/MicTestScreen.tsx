@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  AppState,
   View,
   Text,
   Pressable,
@@ -11,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Audio } from 'expo-av';
+import { getRecordingPermissionsAsync, requestRecordingPermissionsAsync } from 'expo-audio';
 import { Ionicons } from '@expo/vector-icons';
 import { C, FONTS, FS, S, R } from '../../theme';
 import { Btn, Card } from '../../components/ui';
@@ -75,9 +76,12 @@ export default function MicTestScreen({ navigation }: Props) {
   }, [testing]);
 
   // 화면 진입 시 권한 상태 확인
+  // expo-av의 Audio.getPermissionsAsync()는 iOS 17+에서 deprecated된
+  // AVAudioSession.recordPermission을 사용해 권한 변경 후 상태가 갱신되지 않는
+  // 문제가 있어, AVAudioApplication 기반인 expo-audio API를 사용한다.
   useFocusEffect(
     useCallback(() => {
-      Audio.getPermissionsAsync().then(({ granted }) => {
+      getRecordingPermissionsAsync().then(({ granted }) => {
         setPermStatus(granted ? 'granted' : 'denied');
       });
       // 화면 이탈 시 테스트 중이면 중단
@@ -90,9 +94,23 @@ export default function MicTestScreen({ navigation }: Props) {
     }, [])
   );
 
+  // 설정 앱에서 권한을 변경하고 돌아왔을 때(앱이 종료되지 않고 background→active로
+  // 전환되는 경우) useFocusEffect는 다시 실행되지 않으므로, AppState 변화로
+  // 권한 상태를 다시 확인한다.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        getRecordingPermissionsAsync().then(({ granted }) => {
+          setPermStatus(granted ? 'granted' : 'denied');
+        });
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   const handleRequestPermission = async () => {
     try {
-      const { granted } = await Audio.requestPermissionsAsync();
+      const { granted } = await requestRecordingPermissionsAsync();
       setPermStatus(granted ? 'granted' : 'denied');
     } catch {
       setPermStatus('denied');

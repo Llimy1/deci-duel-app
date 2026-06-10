@@ -1,4 +1,6 @@
 import type { ConfigContext, ExpoConfig } from 'expo/config';
+import dotenv from 'dotenv';
+dotenv.config();
 
 /**
  * 정적 app.json → 동적 app.config.ts 전환 (2026-06-07)
@@ -46,6 +48,61 @@ const KAKAO_NATIVE_APP_KEY = requiredEnv('EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY');
 const ADMOB_IOS_APP_ID = envOrDefault('ADMOB_IOS_APP_ID', 'ca-app-pub-3940256099942544~1458002511');
 const ADMOB_ANDROID_APP_ID = envOrDefault('ADMOB_ANDROID_APP_ID', 'ca-app-pub-3940256099942544~3347511713');
 
+// Google AdMob이 권장하는 SKAdNetwork 식별자 목록 (iOS 광고 네트워크 어트리뷰션).
+// https://developers.google.com/admob/ios/3p-skadnetworks
+const ADMOB_SK_AD_NETWORK_ITEMS = [
+  'cstr6suwn9.skadnetwork',
+  '4fzdc2evr5.skadnetwork',
+  '2fnua5tdw4.skadnetwork',
+  'ydx93a7ass.skadnetwork',
+  'p78axxw29g.skadnetwork',
+  'v72qych5uu.skadnetwork',
+  'ludvb6z3bs.skadnetwork',
+  'cp8zw746q7.skadnetwork',
+  '3sh42y64q3.skadnetwork',
+  'c6k4g5qg8m.skadnetwork',
+  's39g8k73mm.skadnetwork',
+  'wg4vff78zm.skadnetwork',
+  '3qy4746246.skadnetwork',
+  'f38h382jlk.skadnetwork',
+  'hs6bdukanm.skadnetwork',
+  'mlmmfzh3r3.skadnetwork',
+  'v4nxqhlyqp.skadnetwork',
+  'wzmmz9fp6w.skadnetwork',
+  'su67r6k2v3.skadnetwork',
+  'yclnxrl5pm.skadnetwork',
+  't38b2kh725.skadnetwork',
+  '7ug5zh24hu.skadnetwork',
+  'gta9lk7p23.skadnetwork',
+  'vutu7akeur.skadnetwork',
+  'y5ghdn5j9k.skadnetwork',
+  'v9wttpbfk9.skadnetwork',
+  'n38lu8286q.skadnetwork',
+  '47vhws6wlr.skadnetwork',
+  'kbd757ywx3.skadnetwork',
+  '9t245vhmpl.skadnetwork',
+  'a2p9lx4jpn.skadnetwork',
+  '22mmun2rn5.skadnetwork',
+  '44jx6755aq.skadnetwork',
+  'k674qkevps.skadnetwork',
+  '4468km3ulz.skadnetwork',
+  '2u9pt9hc89.skadnetwork',
+  '8s468mfl3y.skadnetwork',
+  'klf5c3l5u5.skadnetwork',
+  'ppxm28t8ap.skadnetwork',
+  'kbmxgpxpgc.skadnetwork',
+  'uw77j35x4d.skadnetwork',
+  '578prtvx9j.skadnetwork',
+  '4dzt52r2t5.skadnetwork',
+  'tl55sbb4fm.skadnetwork',
+  'c3frkrj4fj.skadnetwork',
+  'e5fvkxwrpn.skadnetwork',
+  '8c4e2ghe7u.skadnetwork',
+  '3rd42ekr43.skadnetwork',
+  '97r2b46745.skadnetwork',
+  '3qcr597p9d.skadnetwork',
+];
+
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'DeciDuel',
@@ -90,8 +147,15 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     favicon: './assets/favicon.png',
   },
   plugins: [
+    'expo-asset',
     [
       'expo-av',
+      {
+        microphonePermission: 'DeciDuel은 데시벨 대결을 위해 마이크를 사용합니다.',
+      },
+    ],
+    [
+      'expo-audio',
       {
         microphonePermission: 'DeciDuel은 데시벨 대결을 위해 마이크를 사용합니다.',
       },
@@ -127,6 +191,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       {
         iosAppId: ADMOB_IOS_APP_ID,
         androidAppId: ADMOB_ANDROID_APP_ID,
+        skAdNetworkItems: ADMOB_SK_AD_NETWORK_ITEMS,
+      },
+    ],
+    [
+      'expo-tracking-transparency',
+      {
+        userTrackingPermission:
+          'DeciDuel은 더 적절한 광고를 보여주기 위해 활동 데이터를 사용할 수 있습니다.',
       },
     ],
     [

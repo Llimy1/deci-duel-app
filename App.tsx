@@ -22,6 +22,7 @@ import {
 } from '@expo-google-fonts/jetbrains-mono';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import mobileAds from 'react-native-google-mobile-ads';
+import { requestTrackingPermissionsAsync } from 'expo-tracking-transparency';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppStore } from './src/store';
@@ -66,7 +67,14 @@ export default function App() {
   const setMe = useAppStore((s) => s.setMe);
 
   useEffect(() => {
-    mobileAds().initialize().catch(() => {});
+    // iOS: ATT(App Tracking Transparency) 동의 여부와 무관하게 광고 SDK는 초기화하되,
+    // 동의 요청을 먼저 수행해야 AdMob이 (개인화/비개인화 여부에 맞게) 정상적으로 광고를 채울 수 있다.
+    // 동의를 거부해도 비개인화 광고는 계속 노출된다.
+    requestTrackingPermissionsAsync()
+      .catch(() => {})
+      .finally(() => {
+        mobileAds().initialize().catch(() => {});
+      });
   }, []);
 
   useEffect(() => {

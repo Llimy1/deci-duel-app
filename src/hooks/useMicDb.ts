@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import { Audio } from 'expo-av';
+// expo-av Audio.requestPermissionsAsync()는 iOS 17+에서 deprecated된
+// AVAudioSession.recordPermission을 사용해 권한 변경 후에도 stale한 값을 반환할 수 있다.
+// 권한 확인/요청은 AVAudioApplication 기반인 expo-audio를 사용하고,
+// 실제 녹음/미터링은 기존대로 expo-av Audio.Recording을 사용한다.
+import { requestRecordingPermissionsAsync } from 'expo-audio';
 
 const CALIBRATION_OFFSET = 100; // dBFS → approx dB SPL
 
@@ -35,7 +40,7 @@ export function useMicDb(): MicDbState {
   const hasPermissionRef = useRef<boolean | null>(null);
 
   useEffect(() => {
-    Audio.requestPermissionsAsync().then(({ granted }) => {
+    requestRecordingPermissionsAsync().then(({ granted }) => {
       hasPermissionRef.current = granted;
       setHasPermission(granted);
     });
@@ -68,7 +73,7 @@ export function useMicDb(): MicDbState {
     // 권한 확인 — ref 사용으로 start 함수 재생성 방지
     let permitted = hasPermissionRef.current;
     if (!permitted) {
-      const { granted } = await Audio.requestPermissionsAsync();
+      const { granted } = await requestRecordingPermissionsAsync();
       hasPermissionRef.current = granted;
       setHasPermission(granted);
       permitted = granted;
