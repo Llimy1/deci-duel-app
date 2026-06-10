@@ -14,12 +14,22 @@ import type { ConfigContext, ExpoConfig } from 'expo/config';
  * development build 재생성이 필요하다 — 정적 app.json이었을 때와 동일.
  */
 
+function requiredEnv(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+  return value;
+}
+
+function envOrDefault(name: string, fallback: string): string {
+  return process.env[name]?.trim() || fallback;
+}
+
 // Google Cloud Console에서 발급받은 iOS OAuth 클라이언트 ID. Firebase 미사용 구성에서는
 // `iosUrlScheme`을 `com.googleusercontent.apps.<CLIENT_ID 접두부>` 형태로 등록해야 한다.
 // (CLIENT_ID = "<prefix>.apps.googleusercontent.com")
-const GOOGLE_IOS_CLIENT_ID =
-  process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ??
-  '141896064594-be152nedj9891hqmsg5r61p142jan81r.apps.googleusercontent.com';
+const GOOGLE_IOS_CLIENT_ID = requiredEnv('EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID');
 
 const GOOGLE_IOS_URL_SCHEME = `com.googleusercontent.apps.${GOOGLE_IOS_CLIENT_ID.replace(
   /\.apps\.googleusercontent\.com$/,
@@ -29,15 +39,12 @@ const GOOGLE_IOS_URL_SCHEME = `com.googleusercontent.apps.${GOOGLE_IOS_CLIENT_ID
 // Kakao Developers에 등록된 네이티브 앱 키. src/utils/oauthProviders.ts의 런타임 값과
 // 반드시 동일해야 하며, 둘 다 같은 EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY를 참조하므로
 // .env 한 곳만 바꾸면 자동으로 동기화된다.
-const KAKAO_NATIVE_APP_KEY =
-  process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY ?? 'ebd70c0a267863d0ff826c34cea86674';
+const KAKAO_NATIVE_APP_KEY = requiredEnv('EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY');
 
 // AdMob App ID. 실제 배포 전 AdMob 콘솔의 앱별 App ID로 교체해야 한다.
 // 개발/로컬 빌드에서는 Google 공식 테스트 App ID를 사용해 SDK 초기화만 검증한다.
-const ADMOB_IOS_APP_ID =
-  process.env.ADMOB_IOS_APP_ID ?? 'ca-app-pub-3940256099942544~1458002511';
-const ADMOB_ANDROID_APP_ID =
-  process.env.ADMOB_ANDROID_APP_ID ?? 'ca-app-pub-3940256099942544~3347511713';
+const ADMOB_IOS_APP_ID = envOrDefault('ADMOB_IOS_APP_ID', 'ca-app-pub-3940256099942544~1458002511');
+const ADMOB_ANDROID_APP_ID = envOrDefault('ADMOB_ANDROID_APP_ID', 'ca-app-pub-3940256099942544~3347511713');
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,

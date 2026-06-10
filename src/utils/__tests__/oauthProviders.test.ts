@@ -11,6 +11,10 @@
  * 모두 jest.mock으로 대체한다 (실제 네이티브 모듈은 Jest 환경에서 로드 불가).
  */
 
+process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID = 'test-google-web-client.apps.googleusercontent.com';
+process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID = 'test-google-ios-client.apps.googleusercontent.com';
+process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY = 'test-kakao-native-app-key';
+
 const mockHasPlayServices = jest.fn().mockResolvedValue(true);
 const mockSignIn = jest.fn();
 const mockConfigure = jest.fn();
@@ -120,7 +124,7 @@ describe('signInWithKakaoNative', () => {
     const accessToken = await signInWithKakaoNative();
 
     expect(accessToken).toBe('kakao-access-token');
-    expect(mockInitializeKakaoSDK).toHaveBeenCalledWith('ebd70c0a267863d0ff826c34cea86674');
+    expect(mockInitializeKakaoSDK).toHaveBeenCalledWith('test-kakao-native-app-key');
   });
 
   it('accessToken이 없으면 OAuthProviderError를 던진다 (서버 호출로 이어지면 안 됨)', async () => {

@@ -18,20 +18,18 @@ import {
 import { initializeKakaoSDK } from '@react-native-kakao/core';
 import { login as kakaoNativeLogin, isKakaoTalkLoginAvailable } from '@react-native-kakao/user';
 
+function envValue(name: string): string | null {
+  const value = process.env[name]?.trim();
+  return value ? value : null;
+}
+
 // Google Cloud Console에서 발급받은 OAuth 클라이언트 ID (서버 GOOGLE_ALLOWED_CLIENT_IDS와 동일 세트).
 // EXPO_PUBLIC_* 환경변수로 빌드 프로필별(dev/preview/prod) 교체 가능 — client.ts의 API_BASE_URL과 동일 패턴.
-// .env에 값이 없으면 현재 등록된 값으로 폴백한다 (개발 편의).
-const GOOGLE_WEB_CLIENT_ID =
-  process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ??
-  '141896064594-rnpdndiq16havegudljamuv6emefi379.apps.googleusercontent.com';
-const GOOGLE_IOS_CLIENT_ID =
-  process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ??
-  '141896064594-be152nedj9891hqmsg5r61p142jan81r.apps.googleusercontent.com';
+const GOOGLE_WEB_CLIENT_ID = envValue('EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID');
+const GOOGLE_IOS_CLIENT_ID = envValue('EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID');
 
-// Kakao Developers에 등록된 네이티브 앱 키. app.json 플러그인 설정의 nativeAppKey와 반드시 동일해야 한다
-// (정적 app.json은 빌드 타임에 굳어지므로 EXPO_PUBLIC_*로 교체 불가 — app.config.ts 전환 시 함께 정리 권장).
-const KAKAO_NATIVE_APP_KEY =
-  process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY ?? 'ebd70c0a267863d0ff826c34cea86674';
+// Kakao Developers에 등록된 네이티브 앱 키. app.config.ts 플러그인 설정의 nativeAppKey와 반드시 동일해야 한다.
+const KAKAO_NATIVE_APP_KEY = envValue('EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY');
 
 let googleConfigured = false;
 let kakaoSdkInitPromise: Promise<void> | null = null;
@@ -39,6 +37,9 @@ let kakaoSdkInitPromise: Promise<void> | null = null;
 /** GoogleSignin.configure는 여러 번 호출해도 안전하지만, 불필요한 호출을 줄이기 위해 1회만 수행한다. */
 export function ensureGoogleSignInConfigured(): void {
   if (googleConfigured) return;
+  if (!GOOGLE_WEB_CLIENT_ID || !GOOGLE_IOS_CLIENT_ID) {
+    throw new OAuthProviderError('Google 로그인 설정이 누락되었습니다.');
+  }
   GoogleSignin.configure({
     webClientId: GOOGLE_WEB_CLIENT_ID,
     iosClientId: GOOGLE_IOS_CLIENT_ID,
@@ -49,6 +50,9 @@ export function ensureGoogleSignInConfigured(): void {
 
 /** Kakao SDK 초기화는 비동기이며, 동시에 여러 번 호출되어도 한 번만 실행되도록 Promise를 캐시한다. */
 export function ensureKakaoSdkInitialized(): Promise<void> {
+  if (!KAKAO_NATIVE_APP_KEY) {
+    return Promise.reject(new OAuthProviderError('Kakao 로그인 설정이 누락되었습니다.'));
+  }
   if (!kakaoSdkInitPromise) {
     kakaoSdkInitPromise = initializeKakaoSDK(KAKAO_NATIVE_APP_KEY).catch((e) => {
       kakaoSdkInitPromise = null; // 실패 시 다음 시도에서 재초기화하도록 캐시 무효화
