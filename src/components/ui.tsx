@@ -77,6 +77,7 @@ export function Btn({ children, variant = 'primary', size = 'md', onPress, style
         fontSize: sz.fs,
         color: textColor[variant],
         letterSpacing: 0.2,
+        textAlign: 'center',
       }}>{children}</Text>
     </View>
   );
@@ -85,7 +86,10 @@ export function Btn({ children, variant = 'primary', size = 'md', onPress, style
     <Pressable
       onPress={disabled ? undefined : onPress}
       disabled={disabled}
-      style={({ pressed }) => [{ opacity: disabled ? 0.4 : pressed ? 0.88 : 1 }]}
+      style={({ pressed }) => [
+        { opacity: disabled ? 0.4 : pressed ? 0.88 : 1 },
+        full ? { width: '100%' } : null,
+      ]}
     >
       {isGradient ? (
         <LinearGradient
@@ -106,6 +110,7 @@ export function Btn({ children, variant = 'primary', size = 'md', onPress, style
             fontSize: sz.fs,
             color: textColor[variant],
             letterSpacing: 0.2,
+            textAlign: 'center',
           }}>{children}</Text>
         </LinearGradient>
       ) : inner}

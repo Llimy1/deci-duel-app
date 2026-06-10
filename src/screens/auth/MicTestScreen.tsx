@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Audio } from 'expo-av';
+import { Ionicons } from '@expo/vector-icons';
 import { C, FONTS, FS, S, R } from '../../theme';
 import { Btn, Card } from '../../components/ui';
 import { useMicDb } from '../../hooks/useMicDb';
@@ -137,7 +138,8 @@ export default function MicTestScreen({ navigation }: Props) {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.content, { minHeight: height * 0.72 }]}
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.label}>마이크 테스트</Text>
@@ -184,7 +186,7 @@ export default function MicTestScreen({ navigation }: Props) {
           <View style={styles.permSection}>
             <Card style={styles.deniedCard} padding={16}>
               <View style={styles.deniedRow}>
-                <Text style={styles.deniedEmoji}>⚠️</Text>
+                <Ionicons name="warning-outline" size={18} color={C.yellow} style={styles.deniedIcon} />
                 <Text style={styles.deniedText}>
                   마이크 권한이 거부됐어. 설정에서 DeciDuel의 마이크를 허용해줘.
                 </Text>
@@ -207,7 +209,7 @@ export default function MicTestScreen({ navigation }: Props) {
               style={[styles.testToggleBtn, testing && styles.testToggleBtnActive]}
             >
               <Text style={[styles.testToggleText, testing && styles.testToggleTextActive]}>
-                {testing ? '⏹  테스트 중단' : '▶  테스트 시작'}
+                {testing ? '테스트 중단' : '테스트 시작'}
               </Text>
             </Pressable>
 
@@ -223,7 +225,7 @@ export default function MicTestScreen({ navigation }: Props) {
         {/* 개인정보 안내 */}
         <Card style={styles.privacyCard} padding={16}>
           <View style={styles.privacyRow}>
-            <Text style={styles.lockIcon}>🔒</Text>
+            <Ionicons name="lock-closed-outline" size={20} color={C.textDim} style={styles.lockIcon} />
             <Text style={styles.privacyText}>
               녹음 파일은 서버로 전송되지 않아. 측정값(dB)만 기록돼.
             </Text>
@@ -231,22 +233,14 @@ export default function MicTestScreen({ navigation }: Props) {
         </Card>
       </ScrollView>
 
-      <View style={styles.ctaWrap}>
-        <Btn
-          variant={permStatus === 'granted' ? 'primary' : 'ghost'}
-          size="xl"
-          full
-          onPress={permStatus === 'granted' ? handleNext : handleRequestPermission}
-        >
-          {permStatus === 'granted' ? '다음 →' : '마이크 허용하기'}
-        </Btn>
-        {permStatus === 'granted' && (
+      {permStatus === 'granted' && (
+        <View style={styles.ctaWrap}>
+          <Btn variant="primary" size="xl" full onPress={handleNext}>
+            다음 →
+          </Btn>
           <Text style={styles.skipNote}>테스트를 건너뛰어도 돼</Text>
-        )}
-        {permStatus === 'denied' && (
-          <Text style={styles.skipNote}>권한 없이도 계속할 수 있어 (게임은 불가)</Text>
-        )}
-      </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -277,6 +271,9 @@ const styles = StyleSheet.create({
     fontSize: FS.xs,
     color: C.textMute,
     letterSpacing: 0,
+  },
+  scroll: {
+    flex: 1,
   },
   content: {
     paddingHorizontal: S[5],
@@ -333,19 +330,22 @@ const styles = StyleSheet.create({
   },
   dbOverlay: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'baseline',
     gap: 4,
+    minHeight: 48,
   },
   dbNumber: {
     fontFamily: FONTS.display,
     fontSize: 38,
-    lineHeight: 42,
+    lineHeight: 48,
+    includeFontPadding: false,
   },
   dbUnit: {
     fontFamily: FONTS.mono,
     fontSize: FS.sm,
     color: C.textDim,
-    paddingBottom: 6,
+    lineHeight: 18,
+    includeFontPadding: false,
   },
   permRow: {
     marginBottom: S[4],
@@ -368,8 +368,7 @@ const styles = StyleSheet.create({
     gap: S[3],
     alignItems: 'flex-start',
   },
-  deniedEmoji: {
-    fontSize: 18,
+  deniedIcon: {
     marginTop: 1,
   },
   deniedText: {
@@ -453,7 +452,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   lockIcon: {
-    fontSize: 20,
+    marginTop: 1,
   },
   privacyText: {
     flex: 1,
@@ -467,6 +466,7 @@ const styles = StyleSheet.create({
     paddingBottom: S[6],
     alignItems: 'center',
     gap: S[2],
+    width: '100%',
   },
   skipNote: {
     fontFamily: FONTS.body,

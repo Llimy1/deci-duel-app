@@ -533,8 +533,8 @@ const styles = StyleSheet.create({
     gap: S[1],
   },
   editMoodChip: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: R.md,
     alignItems: 'center',
     justifyContent: 'center',

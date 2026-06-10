@@ -20,7 +20,7 @@ type Props = NativeStackScreenProps<AuthStackParamList, 'Terms'>;
 export default function TermsScreen({ navigation }: Props) {
   const [termsAgreed, setTermsAgreed] = useState(false);
   const [privacyAgreed, setPrivacyAgreed] = useState(false);
-  const { height, width } = useWindowDimensions();
+  const { width } = useWindowDimensions();
   const narrow = width < 380;
   const canContinue = termsAgreed && privacyAgreed;
 
@@ -56,7 +56,8 @@ export default function TermsScreen({ navigation }: Props) {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.content, { minHeight: height * 0.72 }]}
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.label}>약관 동의</Text>
@@ -163,6 +164,9 @@ const styles = StyleSheet.create({
     fontSize: FS.xs,
     color: C.textMute,
     letterSpacing: 0,
+  },
+  scroll: {
+    flex: 1,
   },
   content: {
     paddingHorizontal: S[5],

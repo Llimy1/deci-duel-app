@@ -29,7 +29,7 @@ export default function NicknameScreen({ navigation }: Props) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [nicknameAvailable, setNicknameAvailable] = useState<boolean | null>(null);
   const [checkFailed, setCheckFailed] = useState(false);
-  const { height, width } = useWindowDimensions();
+  const { width } = useWindowDimensions();
   const setNickname = useAppStore((s) => s.setNickname);
   const setAvatarColor = useAppStore((s) => s.setAvatarColor);
   const avatarColor = useAppStore((s) => s.avatarColor);
@@ -125,7 +125,8 @@ export default function NicknameScreen({ navigation }: Props) {
         </View>
 
         <ScrollView
-          contentContainerStyle={[styles.scroll, { minHeight: height * 0.72 }]}
+          style={styles.scrollView}
+          contentContainerStyle={styles.scroll}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
@@ -197,6 +198,9 @@ const styles = StyleSheet.create({
     fontSize: FS.xs,
     color: C.textMute,
     letterSpacing: 0,
+  },
+  scrollView: {
+    flex: 1,
   },
   scroll: {
     paddingHorizontal: S[5],

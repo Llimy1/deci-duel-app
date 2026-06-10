@@ -39,7 +39,8 @@ export default function WelcomeScreen({ navigation }: Props) {
       />
 
       <ScrollView
-        contentContainerStyle={[styles.scrollContent, { minHeight: height * 0.82 }]}
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.label}>준비 완료 ✓</Text>
@@ -84,6 +85,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: C.bg,
+  },
+  scroll: {
+    flex: 1,
   },
   scrollContent: {
     paddingHorizontal: S[5],

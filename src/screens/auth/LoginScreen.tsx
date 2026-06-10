@@ -317,6 +317,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: S[4],
     lineHeight: 15,
-    paddingHorizontal: S[2],
   },
 });

@@ -141,7 +141,7 @@ export default function WaitingRoomScreen({ navigation, route }: Props) {
               <View style={styles.dot} />
               <Text style={styles.codeLabel}>ROOM CODE</Text>
             </Row>
-            <Pressable onPress={copyRoomCode} style={styles.copyBtn}>
+            <Pressable onPress={copyRoomCode} style={styles.copyBtn} hitSlop={6}>
               <Text style={styles.copyText}>⧉</Text>
             </Pressable>
           </Row>
@@ -230,8 +230,8 @@ const styles = StyleSheet.create({
     color: C.cyan,
   },
   copyBtn: {
-    width: 38,
-    height: 38,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: R.pill,

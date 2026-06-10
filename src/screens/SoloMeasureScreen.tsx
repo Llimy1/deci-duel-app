@@ -186,7 +186,9 @@ export default function SoloMeasureScreen({ navigation, route }: Props) {
   const timerColor = timer < 1.5 ? C.yellow : C.textDim;
   const compact = height < 740;
   const waveWidth = width - S[5] * 2;
-  const waveHeight = Math.min(height * (compact ? 0.22 : 0.25), compact ? 170 : 210);
+  const waveHeight = phase === 'done'
+    ? Math.min(height * (compact ? 0.16 : 0.18), compact ? 110 : 130)
+    : Math.min(height * (compact ? 0.22 : 0.25), compact ? 170 : 210);
   const statusText = phase === 'measuring' ? '측정중' : phase === 'done' ? '결과' : '대기';
   const statusColor = phase === 'measuring' ? C.lime : phase === 'done' ? C.yellow : C.textMute;
 
@@ -367,21 +369,6 @@ export default function SoloMeasureScreen({ navigation, route }: Props) {
         )}
         {phase === 'done' && (
           <View style={styles.doneActions}>
-            <Btn variant="primary" size="md" full onPress={handleRetry}>
-              다시 측정
-            </Btn>
-            <View style={styles.doneSecondaryActions}>
-              <View style={styles.doneSecondaryAction}>
-                <Btn variant="yellow" size="md" full onPress={() => setDiarySheetVisible(true)}>
-                  기록
-                </Btn>
-              </View>
-              <View style={styles.doneSecondaryAction}>
-                <Btn variant="ghost" size="md" full onPress={openHome}>
-                  홈으로
-                </Btn>
-              </View>
-            </View>
             {diarySavedToastVisible && (
               <Animated.View
                 style={[
@@ -403,6 +390,21 @@ export default function SoloMeasureScreen({ navigation, route }: Props) {
                 </Pressable>
               </Animated.View>
             )}
+            <Btn variant="primary" size="md" full onPress={handleRetry}>
+              다시 측정
+            </Btn>
+            <View style={styles.doneSecondaryActions}>
+              <View style={styles.doneSecondaryAction}>
+                <Btn variant="yellow" size="md" full onPress={() => setDiarySheetVisible(true)}>
+                  기록
+                </Btn>
+              </View>
+              <View style={styles.doneSecondaryAction}>
+                <Btn variant="ghost" size="md" full onPress={openHome}>
+                  홈으로
+                </Btn>
+              </View>
+            </View>
           </View>
         )}
       </View>
