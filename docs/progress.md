@@ -1,7 +1,7 @@
 # DeciDuel App 진행 상황
 
 ## 마지막 업데이트
-2026-06-07
+2026-06-14
 
 ## 현재 상태
 Apple/Google/Kakao OAuth를 전부 **네이티브 SDK 기반**으로 통일 완료 (Codex [14:14] "정정" 지시 반영 — 2026-06-06의 서버사이드 Authorization Code Flow 결정 폐기). 서버 `POST /auth/oauth`가 Apple/Google idToken, Kakao accessToken을 공통으로 검증하며 audience(`aud`) 검증을 추가했고, 앱은 `@react-native-google-signin/google-signin` + `@react-native-kakao/{core,user}`로 LoginScreen을 재작성했다 (`src/utils/oauthProviders.ts` 헬퍼 모듈 신규). 서버/앱 빌드·테스트 전부 통과 (서버 142/142, 앱 121/121). 다음 단계는 dev client 재빌드(`npx expo run:ios`/`run:android`) 후 실기기 E2E QA. Phase B(효과음/햅틱, 딥링크, i18n)는 OAuth QA 이후 진행한다.
@@ -466,6 +466,8 @@ Codex [2026-06-07 14:14] "정정 — Google/Kakao도 네이티브 SDK 기준으�
 ## Decision Log
 | 날짜 | 결정 내용 | 이유 |
 |------|-----------|------|
+| 2026-06-14 | CalendarScreen에 "🔥 이번 달 N일 연속 기록 중" 스트릭 배지 추가(라임 톤 필, 제목 아래, 통계 타일 위). 이번 달에 보고 있을 때만, 오늘부터 역순으로 끊기지 않은 연속 기록 수를 계산해 streak>0일 때만 표시. 통계 타일(기록 일수/평균 dB/최고 dB)은 무채색 유지(현재 코드와 동일, 변경 없음) | diaryStore가 월별로만 데이터를 로드하므로 월 경계를 넘는 연속 기록은 정확히 계산 불가 → "이번 달" 범위로 한정하고 문구에 명시. "스트릭"이라는 용어 대신 "연속 기록"으로 자연어 표기. 통계 타일에 dB 구간 색상(cyan/yellow/pink)을 적용하면 캘린더 범례의 의미와 충돌해 무채색 유지 결정 |
+| 2026-06-14 | QuickLogSheet 결과(저장) 시트 리디자인 + 영문 제목 한글화 + "오늘" 날짜 계산 버그 수정. ① 제목 "SAVE LOG"/"QUICK LOG" → "다이어리 기록"/"측정하기". ② resultMode UI를 CalendarScreen v4 상세 시트와 통일: 퍼플/핑크 글로우 블롭 배경, 큰 무드 이모지(46px)+`entryDbValue`(4xl)+핑크 `dB` 유닛(monoBold), `VizSignatureWave` 제거, 코멘트를 `commentInputWrap` 박스 스타일로 변경, 측정 메타 텍스트("PEAK X dB · TAP TO START") → "최고 XdB · 탭하여 측정 시작". ③ `handleSave`의 `new Date().toISOString().slice(0,10)` → 로컬 `${y}-${mm}-${dd}` 조합으로 변경 | UI 일관성: 다이어리 상세 화면과 기록 저장 화면이 다른 톤이면 어색함. 버그 수정: `toISOString()`은 UTC라 한국시간(UTC+9) 자정~오전9시 사이 측정 시 UTC 날짜가 하루 전날로 저장되어, 로컬 날짜 기준(`getFullYear/getMonth/getDate`)으로 "오늘"을 계산하는 CalendarScreen 캘린더 그리드에 해당 날짜 항목이 표시되지 않는 문제 발생 (claude-brain gotcha #33로 기록) |
 | 2026-06-13 | 다이어리 기록 시트(CalendarScreen 상세/수정, QuickLogSheet resultMode) 전면 리디자인: "사운드 웨이브 시그니처 밴드"(`VizSignatureWave`, `DbViz.tsx`) + "[이모지] [dB] dB" 한 줄 헤더 + 저널 스타일(테두리 없는, line-height 1.85) 코멘트. 코멘트 길이 제한 15자 → 200자(`MAX_COMMENT`)로 확대. 무드는 기존 7종 + `rn-emoji-keyboard`로 커스텀 이모지 선택 가능(`MoodPicker.tsx`의 `MoodRow`, "+" 칩) | "오늘의 일기"처럼 더 긴 코멘트를 쓸 수 있게 해달라는 요청에 맞춰, 기존 박스형 코멘트 UI는 긴 텍스트에 어색했음. dB 측정이라는 앱의 핵심 정체성을 살린 웨이브 밴드를 다이어리만의 시각적 요소로 추가. `VizSignatureWave`는 `seed`(날짜)+`db` 기반 결정론적 시드 난수로 막대 높이를 생성해 같은 항목은 항상 같은 파형을 그림(피크 막대는 점선으로 표시). DayDetailScreen(현재 라우트에 남아있으나 CalendarScreen은 모달 시트를 사용해 실질적으로 미접근)도 일관성을 위해 200자+멀티라인으로 최소 변경 |
 | 2026-06-13 | [서버] `CreateDiaryRequest`/`UpdateDiaryRequest`의 `emoji` 필드 `@MaxLength(2)` → `@MaxLength(16)` | 커스텀 이모지 선택(skin tone, ZWJ 시퀀스, 국기 등 복합 이모지)은 유니코드 코드포인트 기준 2자를 초과할 수 있음. `mood: string`은 계속 리터럴 유니코드 이모지 문자를 저장(포맷 변경 없음), DB 컬럼(`emoji String`)에 길이 제약 없어 마이그레이션 불필요. `docs/api.md`에 emoji(16자)/comment(200자) 검증 규칙 명시 |
 | 2026-06-11 | App Store 6.5" 스크린샷(1242x2688) 5장을 HTML/CSS+Playwright로 제작 | 신규 시뮬레이터 빌드+실캡처 대신, 앱 디자인 시스템(C/FONTS/gradHot)을 그대로 재현한 마케팅용 데모 이미지를 빠르게 생성. `app-store-assets/screenshots/source.html`+`capture.js`로 1242x2688 JPG 5장(Home/SoloMeasure/Duel/Leaderboard/Diary) 출력 |

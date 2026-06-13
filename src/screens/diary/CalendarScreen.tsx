@@ -15,7 +15,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Btn } from '../../components/ui';
-import { VizSignatureWave } from '../../components/DbViz';
 import { MoodEmoji, MoodRow } from '../../components/MoodPicker';
 import { C, FONTS, FS, R, S } from '../../theme';
 import { useDiaryStore } from '../../store/diaryStore';
@@ -104,6 +103,14 @@ export default function CalendarScreen({ navigation }: Props) {
   const highestDb = daysLogged > 0
     ? Math.max(...monthEntries.map(e => e.db))
     : 0;
+
+  let streak = 0;
+  if (year === now.getFullYear() && month === now.getMonth()) {
+    for (let d = now.getDate(); d >= 1; d--) {
+      if (entries[dateKey(d)]) streak++;
+      else break;
+    }
+  }
   const selectedEntry = selectedDate ? entries[selectedDate] : null;
 
   const openDetailSheet = (date: string) => {
@@ -151,6 +158,14 @@ export default function CalendarScreen({ navigation }: Props) {
           <Text style={styles.title}>다이어리</Text>
           <View style={{ width: 36 }} />
         </View>
+
+        {streak > 0 && (
+          <View style={styles.streakRow}>
+            <View style={styles.streakBadge}>
+              <Text style={styles.streakText}>🔥 이번 달 {streak}일 연속 기록 중</Text>
+            </View>
+          </View>
+        )}
 
         {/* Month switcher */}
         <View style={styles.monthRow}>
@@ -251,29 +266,33 @@ export default function CalendarScreen({ navigation }: Props) {
         >
           {selectedEntry && selectedDate && (
             <View style={styles.detailSheet}>
+              <View style={styles.glowPurple} />
+              <View style={styles.glowPink} />
               <View style={styles.sheetHandle} />
               <View style={styles.sheetHeader}>
-                <Text style={styles.sheetLabel}>다이어리 기록</Text>
+                <View>
+                  <Text style={styles.sheetLabel}>다이어리 기록</Text>
+                  <Text style={styles.entryDate}>{selectedDate.replaceAll('-', '.')}</Text>
+                </View>
                 <Pressable onPress={closeDetailSheet} style={styles.sheetCloseBtn}>
                   <Text style={styles.sheetCloseText}>×</Text>
                 </Pressable>
               </View>
 
-              <View style={styles.entryHeaderRow}>
-                <Text style={styles.entryDate}>{selectedDate.replaceAll('-', '.')}</Text>
-                <View style={styles.entryDbRow}>
-                  <MoodEmoji emoji={editing ? selectedMood : selectedEntry.mood} size={36} />
+              <View style={styles.entryDbRow}>
+                <View style={styles.entryEmojiWrap}>
+                  <MoodEmoji emoji={editing ? selectedMood : selectedEntry.mood} size={46} />
+                </View>
+                <View style={styles.entryDbNumWrap}>
                   <Text style={[styles.entryDbValue, { color: dbColor(selectedEntry.db) }]}>{selectedEntry.db}</Text>
                   <Text style={styles.entryDbUnit}>dB</Text>
                 </View>
               </View>
 
-              <VizSignatureWave db={selectedEntry.db} seed={selectedDate} width={width - S[5] * 2} height={84} cols={28} />
-
               {editing ? (
                 <View style={styles.editWrap}>
                   <MoodRow mood={selectedMood} onSelect={setSelectedMood} />
-                  <View style={styles.commentBox}>
+                  <View style={styles.commentInputWrap}>
                     <TextInput
                       style={styles.commentInput}
                       value={comment}
@@ -290,11 +309,9 @@ export default function CalendarScreen({ navigation }: Props) {
                   <Btn variant="primary" size="md" full onPress={handleDetailSave}>저장</Btn>
                 </View>
               ) : (
-                <View style={styles.commentBox}>
-                  <ScrollView style={styles.commentScroll}>
-                    <Text style={styles.detailComment}>{selectedEntry.comment || '코멘트 없음'}</Text>
-                  </ScrollView>
-                </View>
+                <ScrollView style={styles.commentScroll}>
+                  <Text style={styles.detailComment}>{selectedEntry.comment || '코멘트 없음'}</Text>
+                </ScrollView>
               )}
 
               <View style={styles.detailActions}>
@@ -332,6 +349,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: S[5],
     paddingTop: S[2],
     paddingBottom: S[3],
+  },
+  streakRow: {
+    alignItems: 'center',
+    marginBottom: S[3],
+  },
+  streakBadge: {
+    backgroundColor: `${C.lime}1f`,
+    borderWidth: 1,
+    borderColor: `${C.lime}66`,
+    borderRadius: R.pill,
+    paddingHorizontal: S[3],
+    paddingVertical: 6,
+  },
+  streakText: {
+    fontFamily: FONTS.mono,
+    fontSize: FS.xs,
+    letterSpacing: 0.5,
+    color: C.lime,
   },
   title: {
     fontFamily: FONTS.headBold,
@@ -479,6 +514,25 @@ const styles = StyleSheet.create({
     paddingTop: S[3],
     paddingBottom: S[6],
     gap: S[3],
+    overflow: 'hidden',
+  },
+  glowPurple: {
+    position: 'absolute',
+    top: -60,
+    left: -40,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: `${C.purple}33`,
+  },
+  glowPink: {
+    position: 'absolute',
+    top: -30,
+    right: -60,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: `${C.pink}26`,
   },
   sheetHandle: {
     width: 56,
@@ -489,7 +543,7 @@ const styles = StyleSheet.create({
   },
   sheetHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
   },
   sheetLabel: {
@@ -497,6 +551,7 @@ const styles = StyleSheet.create({
     fontSize: FS.sm,
     letterSpacing: 0,
     color: C.textMute,
+    marginBottom: 4,
   },
   sheetCloseBtn: {
     width: 40,
@@ -510,11 +565,6 @@ const styles = StyleSheet.create({
     lineHeight: 34,
     color: C.textDim,
   },
-  entryHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-  },
   entryDate: {
     fontFamily: FONTS.headBold,
     fontSize: FS.xl,
@@ -522,26 +572,28 @@ const styles = StyleSheet.create({
   },
   entryDbRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
+    alignItems: 'center',
+    gap: S[3],
+  },
+  entryEmojiWrap: {
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  entryDbNumWrap: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
   },
   entryDbValue: {
     fontFamily: FONTS.headBold,
-    fontSize: FS['3xl'],
-    lineHeight: 40,
+    fontSize: FS['4xl'],
+    lineHeight: 56,
   },
   entryDbUnit: {
-    fontFamily: FONTS.mono,
+    fontFamily: FONTS.monoBold,
     fontSize: FS.md,
-    color: C.textDim,
-    paddingBottom: 6,
-  },
-  commentBox: {
-    backgroundColor: C.surface,
-    borderWidth: 1,
-    borderColor: C.line,
-    borderRadius: R.md,
-    padding: S[3],
+    color: C.pink,
   },
   commentScroll: {
     maxHeight: 200,
@@ -549,11 +601,16 @@ const styles = StyleSheet.create({
   detailComment: {
     fontFamily: FONTS.body,
     fontSize: FS.md,
-    lineHeight: FS.md * 1.6,
+    lineHeight: FS.md * 1.85,
     color: C.textDim,
   },
   editWrap: {
     gap: S[3],
+  },
+  commentInputWrap: {
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: R.md,
+    padding: S[3],
   },
   commentInput: {
     minHeight: 100,

@@ -10,9 +10,9 @@ import {
   Platform,
   useWindowDimensions,
 } from 'react-native';
-import { C, FONTS, FS, S } from '../theme';
+import { C, FONTS, FS, R, S } from '../theme';
 import { Btn } from './ui';
-import { VizScrollWave, VizSignatureWave } from './DbViz';
+import { VizScrollWave } from './DbViz';
 import { MoodEmoji, MoodRow } from './MoodPicker';
 import { useDiaryStore } from '../store/diaryStore';
 import { useMicDb } from '../hooks/useMicDb';
@@ -61,7 +61,8 @@ export default function QuickLogSheet({
   }, [measuring, mic.stop]);
 
   const handleSave = () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     saveEntry({ date: today, db: Math.round(initialDb ?? (mic.peak || mic.db)), mood, comment });
     mic.reset();
     setTimer(5);
@@ -105,23 +106,26 @@ export default function QuickLogSheet({
       <Pressable style={styles.backdrop} onPress={handleClose} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.sheetWrap}>
         <View style={styles.sheet}>
+          {resultMode && <View style={styles.glowPurple} />}
+          {resultMode && <View style={styles.glowPink} />}
           <View style={styles.handle} />
 
           <View style={styles.headerRow}>
-            <Text style={styles.sheetTitle}>{resultMode ? 'SAVE LOG' : 'QUICK LOG'}</Text>
+            <Text style={styles.sheetTitle}>{resultMode ? '다이어리 기록' : '측정하기'}</Text>
             <Pressable onPress={handleClose} style={styles.closeBtn}>
               <Text style={styles.closeText}>×</Text>
             </Pressable>
           </View>
 
           {resultMode ? (
-            <View style={styles.vizWrap}>
-              <View style={styles.entryDbRow}>
-                <MoodEmoji emoji={mood} size={36} />
+            <View style={styles.entryDbRow}>
+              <View style={styles.entryEmojiWrap}>
+                <MoodEmoji emoji={mood} size={46} />
+              </View>
+              <View style={styles.entryDbNumWrap}>
                 <Text style={[styles.entryDbValue, { color: dbColor(displayDb) }]}>{displayDb}</Text>
                 <Text style={styles.entryDbUnit}>dB</Text>
               </View>
-              <VizSignatureWave db={displayDb} seed={new Date().toISOString().slice(0, 10)} width={waveWidth} height={84} cols={28} />
             </View>
           ) : (
             <View style={styles.vizWrap}>
@@ -131,7 +135,7 @@ export default function QuickLogSheet({
                 <Text style={styles.dbUnit}>dB</Text>
               </View>
               <Text style={styles.measureMeta}>
-                PEAK {Math.round(mic.peak)} dB · {measuring ? `${timer.toFixed(1)}s LEFT` : 'TAP TO START'}
+                최고 {Math.round(mic.peak)}dB · {measuring ? `${timer.toFixed(1)}초 남음` : '탭하여 측정 시작'}
               </Text>
             </View>
           )}
@@ -146,7 +150,7 @@ export default function QuickLogSheet({
           <MoodRow mood={mood} onSelect={setMood} />
 
           <Text style={styles.sectionLabel}>코멘트</Text>
-          <View>
+          <View style={styles.commentInputWrap}>
             <TextInput
               style={styles.commentInput}
               value={comment}
@@ -187,6 +191,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: `${C.purple}66`,
     gap: S[2],
+    overflow: 'hidden',
+  },
+  glowPurple: {
+    position: 'absolute',
+    top: -60,
+    left: -40,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: `${C.purple}33`,
+  },
+  glowPink: {
+    position: 'absolute',
+    top: -30,
+    right: -60,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: `${C.pink}26`,
   },
   handle: {
     width: 56,
@@ -255,28 +278,42 @@ const styles = StyleSheet.create({
   },
   entryDbRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
+    alignItems: 'center',
+    gap: S[3],
+    paddingTop: S[1],
+  },
+  entryEmojiWrap: {
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  entryDbNumWrap: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
   },
   entryDbValue: {
     fontFamily: FONTS.headBold,
-    fontSize: FS['3xl'],
-    lineHeight: 40,
+    fontSize: FS['4xl'],
+    lineHeight: 56,
   },
   entryDbUnit: {
-    fontFamily: FONTS.mono,
+    fontFamily: FONTS.monoBold,
     fontSize: FS.md,
-    color: C.textDim,
-    paddingBottom: 6,
+    color: C.pink,
+  },
+  commentInputWrap: {
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: R.md,
+    padding: S[3],
   },
   commentInput: {
-    minHeight: 110,
+    minHeight: 100,
     maxHeight: 220,
     fontFamily: FONTS.body,
-    fontSize: FS.lg,
-    lineHeight: FS.lg * 1.7,
+    fontSize: FS.md,
+    lineHeight: FS.md * 1.6,
     color: C.text,
-    paddingTop: S[1],
     paddingRight: 56,
   },
   commentCounter: {
