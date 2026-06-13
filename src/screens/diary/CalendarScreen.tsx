@@ -16,8 +16,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Btn } from '../../components/ui';
 import { VizSignatureWave } from '../../components/DbViz';
-import { MoodRow } from '../../components/MoodPicker';
-import { C, FONTS, FS, S } from '../../theme';
+import { MoodEmoji, MoodRow } from '../../components/MoodPicker';
+import { C, FONTS, FS, R, S } from '../../theme';
 import { useDiaryStore } from '../../store/diaryStore';
 import type { DiaryStackParamList } from '../../navigation/types';
 
@@ -212,7 +212,9 @@ export default function CalendarScreen({ navigation }: Props) {
                 <Text style={[styles.cellDay, { color: entry ? c! : isToday ? todayColor : C.textMute }]}>{day}</Text>
                 {entry && (
                   <>
-                    <Text style={styles.cellEmoji}>{entry.mood}</Text>
+                    <View style={styles.cellEmojiWrap}>
+                      <MoodEmoji emoji={entry.mood} size={22} />
+                    </View>
                     <Text style={[styles.cellDb, { color: c! }]}>{entry.db}</Text>
                   </>
                 )}
@@ -260,18 +262,18 @@ export default function CalendarScreen({ navigation }: Props) {
               <View style={styles.entryHeaderRow}>
                 <Text style={styles.entryDate}>{selectedDate.replaceAll('-', '.')}</Text>
                 <View style={styles.entryDbRow}>
-                  <Text style={styles.entryMoodEmoji}>{editing ? selectedMood : selectedEntry.mood}</Text>
+                  <MoodEmoji emoji={editing ? selectedMood : selectedEntry.mood} size={36} />
                   <Text style={[styles.entryDbValue, { color: dbColor(selectedEntry.db) }]}>{selectedEntry.db}</Text>
                   <Text style={styles.entryDbUnit}>dB</Text>
                 </View>
               </View>
 
-              <VizSignatureWave db={selectedEntry.db} seed={selectedDate} width={width - S[5] * 2} height={72} cols={28} />
+              <VizSignatureWave db={selectedEntry.db} seed={selectedDate} width={width - S[5] * 2} height={84} cols={28} />
 
               {editing ? (
                 <View style={styles.editWrap}>
                   <MoodRow mood={selectedMood} onSelect={setSelectedMood} />
-                  <View>
+                  <View style={styles.commentBox}>
                     <TextInput
                       style={styles.commentInput}
                       value={comment}
@@ -288,9 +290,11 @@ export default function CalendarScreen({ navigation }: Props) {
                   <Btn variant="primary" size="md" full onPress={handleDetailSave}>저장</Btn>
                 </View>
               ) : (
-                <ScrollView style={styles.commentScroll}>
-                  <Text style={styles.detailComment}>{selectedEntry.comment || '코멘트 없음'}</Text>
-                </ScrollView>
+                <View style={styles.commentBox}>
+                  <ScrollView style={styles.commentScroll}>
+                    <Text style={styles.detailComment}>{selectedEntry.comment || '코멘트 없음'}</Text>
+                  </ScrollView>
+                </View>
               )}
 
               <View style={styles.detailActions}>
@@ -403,13 +407,14 @@ const styles = StyleSheet.create({
     top: 3,
     left: 5,
   },
-  cellEmoji: {
-    fontSize: 16,
-    lineHeight: 18,
+  cellEmojiWrap: {
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   cellDb: {
     fontFamily: FONTS.monoBold,
-    fontSize: FS.xs,
+    fontSize: FS.sm,
   },
   legend: {
     flexDirection: 'row',
@@ -489,7 +494,7 @@ const styles = StyleSheet.create({
   },
   sheetLabel: {
     fontFamily: FONTS.bodySemibold,
-    fontSize: FS.xs,
+    fontSize: FS.sm,
     letterSpacing: 0,
     color: C.textMute,
   },
@@ -512,56 +517,57 @@ const styles = StyleSheet.create({
   },
   entryDate: {
     fontFamily: FONTS.headBold,
-    fontSize: FS.lg,
+    fontSize: FS.xl,
     color: C.text,
   },
   entryDbRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 6,
-  },
-  entryMoodEmoji: {
-    fontSize: 22,
-    lineHeight: 28,
+    gap: 8,
   },
   entryDbValue: {
     fontFamily: FONTS.headBold,
-    fontSize: FS['2xl'],
-    lineHeight: 32,
+    fontSize: FS['3xl'],
+    lineHeight: 40,
   },
   entryDbUnit: {
     fontFamily: FONTS.mono,
-    fontSize: FS.sm,
+    fontSize: FS.md,
     color: C.textDim,
-    paddingBottom: 5,
+    paddingBottom: 6,
+  },
+  commentBox: {
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.line,
+    borderRadius: R.md,
+    padding: S[3],
   },
   commentScroll: {
-    maxHeight: 160,
+    maxHeight: 200,
   },
   detailComment: {
     fontFamily: FONTS.body,
     fontSize: FS.md,
-    lineHeight: FS.md * 1.85,
+    lineHeight: FS.md * 1.6,
     color: C.textDim,
-    paddingVertical: S[2],
   },
   editWrap: {
     gap: S[3],
   },
   commentInput: {
-    minHeight: 110,
-    maxHeight: 200,
+    minHeight: 100,
+    maxHeight: 220,
     fontFamily: FONTS.body,
     fontSize: FS.md,
-    lineHeight: FS.md * 1.85,
+    lineHeight: FS.md * 1.6,
     color: C.text,
-    paddingTop: S[1],
     paddingRight: 56,
   },
   commentCounter: {
     position: 'absolute',
-    right: 0,
-    bottom: 4,
+    right: S[3],
+    bottom: S[3],
     fontFamily: FONTS.mono,
     fontSize: FS.xs,
     color: C.textMute,

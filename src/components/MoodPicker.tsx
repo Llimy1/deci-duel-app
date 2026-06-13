@@ -5,6 +5,15 @@ import { C, FONTS, R, S } from '../theme';
 
 export const MOODS = ['😆', '😎', '🔥', '💢', '🥺', '😤', '😭'];
 
+interface MoodEmojiProps {
+  emoji: string;
+  size: number;
+}
+
+export function MoodEmoji({ emoji, size }: MoodEmojiProps) {
+  return <Text style={{ fontSize: size, lineHeight: size * 1.2 }}>{emoji}</Text>;
+}
+
 interface MoodRowProps {
   mood: string;
   onSelect: (emoji: string) => void;
@@ -29,20 +38,12 @@ export function MoodRow({ mood, onSelect, chipSize = 40 }: MoodRowProps) {
             onPress={() => onSelect(m)}
             style={[styles.chip, { width: chipSize, height: chipSize }, mood === m && styles.chipSelected]}
           >
-            <Text style={styles.emoji}>{m}</Text>
+            <MoodEmoji emoji={m} size={chipSize * 0.65} />
           </Pressable>
         ))}
-        {isCustom && (
-          <Pressable
-            onPress={() => setPickerOpen(true)}
-            style={[styles.chip, { width: chipSize, height: chipSize }, styles.chipSelected]}
-          >
-            <Text style={styles.emoji}>{mood}</Text>
-          </Pressable>
-        )}
         <Pressable
           onPress={() => setPickerOpen(true)}
-          style={[styles.chip, styles.chipAdd, { width: chipSize, height: chipSize }]}
+          style={[styles.chip, styles.chipAdd, { width: chipSize, height: chipSize }, isCustom && styles.chipSelected]}
         >
           <Text style={styles.plus}>+</Text>
         </Pressable>
@@ -97,9 +98,6 @@ const styles = StyleSheet.create({
   },
   chipAdd: {
     borderStyle: 'dashed',
-  },
-  emoji: {
-    fontSize: 20,
   },
   plus: {
     fontFamily: FONTS.headBold,

@@ -13,7 +13,7 @@ import {
 import { C, FONTS, FS, S } from '../theme';
 import { Btn } from './ui';
 import { VizScrollWave, VizSignatureWave } from './DbViz';
-import { MoodRow } from './MoodPicker';
+import { MoodEmoji, MoodRow } from './MoodPicker';
 import { useDiaryStore } from '../store/diaryStore';
 import { useMicDb } from '../hooks/useMicDb';
 import { Toast } from '../utils/toast';
@@ -117,11 +117,11 @@ export default function QuickLogSheet({
           {resultMode ? (
             <View style={styles.vizWrap}>
               <View style={styles.entryDbRow}>
-                <Text style={styles.entryMoodEmoji}>{mood}</Text>
+                <MoodEmoji emoji={mood} size={36} />
                 <Text style={[styles.entryDbValue, { color: dbColor(displayDb) }]}>{displayDb}</Text>
                 <Text style={styles.entryDbUnit}>dB</Text>
               </View>
-              <VizSignatureWave db={displayDb} seed={new Date().toISOString().slice(0, 10)} width={waveWidth} height={72} cols={28} />
+              <VizSignatureWave db={displayDb} seed={new Date().toISOString().slice(0, 10)} width={waveWidth} height={84} cols={28} />
             </View>
           ) : (
             <View style={styles.vizWrap}>
@@ -256,29 +256,25 @@ const styles = StyleSheet.create({
   entryDbRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 6,
-  },
-  entryMoodEmoji: {
-    fontSize: 22,
-    lineHeight: 28,
+    gap: 8,
   },
   entryDbValue: {
     fontFamily: FONTS.headBold,
-    fontSize: FS['2xl'],
-    lineHeight: 32,
+    fontSize: FS['3xl'],
+    lineHeight: 40,
   },
   entryDbUnit: {
     fontFamily: FONTS.mono,
-    fontSize: FS.sm,
+    fontSize: FS.md,
     color: C.textDim,
-    paddingBottom: 5,
+    paddingBottom: 6,
   },
   commentInput: {
-    minHeight: 90,
-    maxHeight: 200,
+    minHeight: 110,
+    maxHeight: 220,
     fontFamily: FONTS.body,
-    fontSize: FS.md,
-    lineHeight: FS.md * 1.85,
+    fontSize: FS.lg,
+    lineHeight: FS.lg * 1.7,
     color: C.text,
     paddingTop: S[1],
     paddingRight: 56,
