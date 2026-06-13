@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, ActivityIndicator, LogBox } from 'react-native';
+import { View, ActivityIndicator, LogBox, Alert, Linking } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
@@ -38,6 +38,7 @@ import { getTokens, saveTokens, clearTokens } from './src/utils/secureStorage';
 import { refreshTokens } from './src/api/auth';
 import { Toast } from './src/utils/toast';
 import { fetchMeWithRetry } from './src/utils/profileHydration';
+import { checkForAppUpdate, skipAppUpdateVersion } from './src/utils/appUpdate';
 
 LogBox.ignoreLogs([
   "Cannot read property 'host' of undefined",
@@ -113,6 +114,29 @@ export default function App() {
       setSessionExpired(false);
     }
   }, [sessionExpired, splashDone, sessionRestored]);
+
+  useEffect(() => {
+    if (!splashDone || !sessionRestored) return;
+
+    checkForAppUpdate().then((update) => {
+      if (!update) return;
+      Alert.alert(
+        '업데이트 안내',
+        `새로운 버전(${update.version})이 출시되었어요. 업데이트하시겠습니까?`,
+        [
+          {
+            text: '나중에',
+            style: 'cancel',
+            onPress: () => skipAppUpdateVersion(update.version),
+          },
+          {
+            text: '업데이트',
+            onPress: () => Linking.openURL(update.storeUrl).catch(() => {}),
+          },
+        ],
+      );
+    });
+  }, [splashDone, sessionRestored]);
 
   useEffect(() => {
     if (!isLoggedIn || hasOnboarded) return;
