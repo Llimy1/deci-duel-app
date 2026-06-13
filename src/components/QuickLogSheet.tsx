@@ -10,9 +10,10 @@ import {
   Platform,
   useWindowDimensions,
 } from 'react-native';
-import { C, FONTS, FS, S, R } from '../theme';
+import { C, FONTS, FS, S } from '../theme';
 import { Btn } from './ui';
-import { VizScrollWave } from './DbViz';
+import { VizScrollWave, VizSignatureWave } from './DbViz';
+import { MoodRow } from './MoodPicker';
 import { useDiaryStore } from '../store/diaryStore';
 import { useMicDb } from '../hooks/useMicDb';
 import { Toast } from '../utils/toast';
@@ -24,8 +25,13 @@ interface Props {
   initialDb?: number;
 }
 
-const MOODS = ['😆', '😎', '🔥', '💢', '🥺', '😤', '😭'];
-const MAX_COMMENT = 15;
+const MAX_COMMENT = 200;
+
+function dbColor(db: number): string {
+  if (db >= 110) return C.pink;
+  if (db >= 90) return C.yellow;
+  return C.cyan;
+}
 
 export default function QuickLogSheet({
   visible, onClose, onSaved, initialDb,
@@ -108,18 +114,27 @@ export default function QuickLogSheet({
             </Pressable>
           </View>
 
-          <View style={styles.vizWrap}>
-            {!resultMode && (
-              <VizScrollWave value={liveDb} width={waveWidth} height={58} cols={42} />
-            )}
-            <View style={styles.dbRow}>
-              <Text style={styles.dbValue}>{displayDb}</Text>
-              <Text style={styles.dbUnit}>dB</Text>
+          {resultMode ? (
+            <View style={styles.vizWrap}>
+              <View style={styles.entryDbRow}>
+                <Text style={styles.entryMoodEmoji}>{mood}</Text>
+                <Text style={[styles.entryDbValue, { color: dbColor(displayDb) }]}>{displayDb}</Text>
+                <Text style={styles.entryDbUnit}>dB</Text>
+              </View>
+              <VizSignatureWave db={displayDb} seed={new Date().toISOString().slice(0, 10)} width={waveWidth} height={72} cols={28} />
             </View>
-            <Text style={styles.measureMeta}>
-              PEAK {Math.round(initialDb ?? mic.peak)} dB · {resultMode ? 'ADD MOOD' : measuring ? `${timer.toFixed(1)}s LEFT` : 'TAP TO START'}
-            </Text>
-          </View>
+          ) : (
+            <View style={styles.vizWrap}>
+              <VizScrollWave value={liveDb} width={waveWidth} height={58} cols={42} />
+              <View style={styles.dbRow}>
+                <Text style={styles.dbValue}>{displayDb}</Text>
+                <Text style={styles.dbUnit}>dB</Text>
+              </View>
+              <Text style={styles.measureMeta}>
+                PEAK {Math.round(mic.peak)} dB · {measuring ? `${timer.toFixed(1)}s LEFT` : 'TAP TO START'}
+              </Text>
+            </View>
+          )}
 
           {!resultMode && (
             <Btn variant={measuring ? 'ghost' : 'cyan'} size="md" full onPress={handleMeasureToggle}>
@@ -128,27 +143,19 @@ export default function QuickLogSheet({
           )}
 
           <Text style={styles.sectionLabel}>무드</Text>
-          <View style={styles.moodRow}>
-            {MOODS.map((m) => (
-              <Pressable
-                key={m}
-                onPress={() => setMood(m)}
-                style={[styles.moodChip, mood === m && styles.moodChipSelected]}
-              >
-                <Text style={styles.moodEmoji}>{m}</Text>
-              </Pressable>
-            ))}
-          </View>
+          <MoodRow mood={mood} onSelect={setMood} />
 
           <Text style={styles.sectionLabel}>코멘트</Text>
-          <View style={styles.commentWrap}>
+          <View>
             <TextInput
               style={styles.commentInput}
               value={comment}
               onChangeText={(t) => setComment(t.slice(0, MAX_COMMENT))}
-              placeholder="오늘의 한 마디"
+              placeholder="오늘의 이야기를 적어보세요"
               placeholderTextColor={C.textMute}
               maxLength={MAX_COMMENT}
+              multiline
+              textAlignVertical="top"
             />
             <Text style={styles.commentCounter}>{comment.length}/{MAX_COMMENT}</Text>
           </View>
@@ -246,48 +253,40 @@ const styles = StyleSheet.create({
     color: C.textMute,
     letterSpacing: 1.5,
   },
-  moodRow: {
+  entryDbRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: S[1],
+    alignItems: 'flex-end',
+    gap: 6,
   },
-  moodChip: {
-    width: 40,
-    height: 40,
-    borderRadius: R.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#13091f',
-    borderWidth: 1,
-    borderColor: C.line,
+  entryMoodEmoji: {
+    fontSize: 22,
+    lineHeight: 28,
   },
-  moodChipSelected: {
-    borderColor: C.pink,
-    backgroundColor: `${C.pink}22`,
+  entryDbValue: {
+    fontFamily: FONTS.headBold,
+    fontSize: FS['2xl'],
+    lineHeight: 32,
   },
-  moodEmoji: {
-    fontSize: 21,
-  },
-  commentWrap: {
-    position: 'relative',
+  entryDbUnit: {
+    fontFamily: FONTS.mono,
+    fontSize: FS.sm,
+    color: C.textDim,
+    paddingBottom: 5,
   },
   commentInput: {
-    height: 52,
-    backgroundColor: '#12091d',
-    borderRadius: R.md,
-    borderWidth: 1,
-    borderColor: C.line,
-    paddingHorizontal: S[4],
-    paddingRight: 50,
+    minHeight: 90,
+    maxHeight: 200,
     fontFamily: FONTS.body,
     fontSize: FS.md,
+    lineHeight: FS.md * 1.85,
     color: C.text,
+    paddingTop: S[1],
+    paddingRight: 56,
   },
   commentCounter: {
     position: 'absolute',
-    right: S[3],
-    top: '50%',
-    transform: [{ translateY: -8 }],
+    right: 0,
+    bottom: 4,
     fontFamily: FONTS.mono,
     fontSize: FS.xs,
     color: C.textMute,
