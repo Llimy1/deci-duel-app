@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Btn } from '../../components/ui';
 import { MoodEmoji, MoodRow } from '../../components/MoodPicker';
+import AudioPlayer from '../../components/AudioPlayer';
 import { C, FONTS, FS, R, S } from '../../theme';
 import { useDiaryStore } from '../../store/diaryStore';
 import type { DiaryStackParamList } from '../../navigation/types';
@@ -288,6 +289,8 @@ export default function CalendarScreen({ navigation }: Props) {
                   <Text style={styles.entryDbUnit}>dB</Text>
                 </View>
               </View>
+
+              {selectedEntry.audioUri && <AudioPlayer uri={selectedEntry.audioUri} />}
 
               {editing ? (
                 <View style={styles.editWrap}>

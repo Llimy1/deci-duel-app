@@ -14,15 +14,19 @@ import { C, FONTS, FS, R, S } from '../theme';
 import { Btn } from './ui';
 import { VizScrollWave } from './DbViz';
 import { MoodEmoji, MoodRow } from './MoodPicker';
+import AudioPlayer from './AudioPlayer';
 import { useDiaryStore } from '../store/diaryStore';
 import { useMicDb } from '../hooks/useMicDb';
 import { Toast } from '../utils/toast';
+import { persistRecording } from '../utils/audioStorage';
 
 interface Props {
   visible: boolean;
   onClose: () => void;
   onSaved?: () => void;
   initialDb?: number;
+  /** 솔로 측정 화면에서 녹음한 임시 오디오 파일 경로 */
+  audioUri?: string | null;
 }
 
 const MAX_COMMENT = 200;
@@ -34,16 +38,19 @@ function dbColor(db: number): string {
 }
 
 export default function QuickLogSheet({
-  visible, onClose, onSaved, initialDb,
+  visible, onClose, onSaved, initialDb, audioUri,
 }: Props) {
   const { width } = useWindowDimensions();
   const [measuring, setMeasuring] = useState(false);
   const [timer, setTimer] = useState(5);
   const [mood, setMood] = useState('😎');
   const [comment, setComment] = useState('');
+  const [recordedUri, setRecordedUri] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const saveEntry = useDiaryStore((s) => s.saveEntry);
   const mic = useMicDb();
   const resultMode = initialDb !== undefined;
+  const playbackUri = audioUri ?? recordedUri;
 
   useEffect(() => {
     if (!measuring) return;
@@ -52,7 +59,7 @@ export default function QuickLogSheet({
         const next = Math.max(0, parseFloat((t - 0.1).toFixed(1)));
         if (next <= 0) {
           setMeasuring(false);
-          mic.stop();
+          mic.stop().then((uri) => setRecordedUri(uri));
         }
         return next;
       });
@@ -60,15 +67,25 @@ export default function QuickLogSheet({
     return () => clearInterval(id);
   }, [measuring, mic.stop]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (saving) return;
+    setSaving(true);
     const now = new Date();
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    saveEntry({ date: today, db: Math.round(initialDb ?? (mic.peak || mic.db)), mood, comment });
+    let savedAudioUri: string | undefined;
+    if (playbackUri) {
+      try {
+        savedAudioUri = await persistRecording(playbackUri, today);
+      } catch {}
+    }
+    await saveEntry({ date: today, db: Math.round(initialDb ?? (mic.peak || mic.db)), mood, comment, audioUri: savedAudioUri });
     mic.reset();
+    setRecordedUri(null);
     setTimer(5);
     setMeasuring(false);
     setMood('😎');
     setComment('');
+    setSaving(false);
     onSaved?.();
     onClose();
   };
@@ -77,6 +94,7 @@ export default function QuickLogSheet({
     if (!measuring) {
       setTimer(5);
       mic.reset();
+      setRecordedUri(null);
       const started = await mic.start();
       if (!started) {
         Toast.error('마이크를 시작할 수 없습니다.');
@@ -84,7 +102,8 @@ export default function QuickLogSheet({
       }
       setMeasuring(true);
     } else {
-      await mic.stop();
+      const uri = await mic.stop();
+      setRecordedUri(uri);
       setMeasuring(false);
       setTimer(5);
     }
@@ -92,6 +111,7 @@ export default function QuickLogSheet({
 
   const handleClose = () => {
     mic.reset();
+    setRecordedUri(null);
     setMeasuring(false);
     setTimer(5);
     onClose();
@@ -146,6 +166,8 @@ export default function QuickLogSheet({
             </Btn>
           )}
 
+          {resultMode && playbackUri && <AudioPlayer uri={playbackUri} />}
+
           <Text style={styles.sectionLabel}>무드</Text>
           <MoodRow mood={mood} onSelect={setMood} />
 
@@ -164,7 +186,7 @@ export default function QuickLogSheet({
             <Text style={styles.commentCounter}>{comment.length}/{MAX_COMMENT}</Text>
           </View>
 
-          <Btn variant="yellow" size="md" full onPress={handleSave} style={{ marginTop: S[2] }}>
+          <Btn variant="yellow" size="md" full onPress={handleSave} disabled={saving} style={{ marginTop: S[2] }}>
             저장
           </Btn>
         </View>

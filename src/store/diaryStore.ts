@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createDiary, deleteDiary, DiaryEntryResponse, getMonthlyDiary, updateDiary } from '../api/diary';
 import { showErrorAlert } from '../utils/errorHandler';
 import { Toast } from '../utils/toast';
+import { deleteRecording } from '../utils/audioStorage';
 import { useAppStore } from './index';
 
 export interface DiaryEntry {
@@ -10,10 +11,14 @@ export interface DiaryEntry {
   db: number;
   mood: string;
   comment: string;
+  /** 솔로 측정 녹음 파일의 로컬 경로 (서버 동기화 대상 아님) */
+  audioUri?: string;
 }
 
 interface DiaryState {
   entries: Record<string, DiaryEntry>;
+  /** date → 로컬 녹음 파일 경로. 서버 동기화로 entries가 갈아치워져도 보존된다. */
+  audioMap: Record<string, string>;
   loaded: boolean;
   loadEntries: (year?: number, month?: number) => Promise<void>;
   saveEntry: (entry: DiaryEntry) => Promise<void>;
@@ -21,6 +26,7 @@ interface DiaryState {
 }
 
 const STORAGE_KEY = 'deci_diary_entries';
+const AUDIO_MAP_KEY = 'deci_diary_audio_map';
 
 function fromApiEntry(entry: DiaryEntryResponse): DiaryEntry {
   return {
@@ -36,16 +42,32 @@ function isSameMonth(date: string, year: number, month: number) {
   return entryYear === year && entryMonth === month;
 }
 
+async function loadAudioMap(): Promise<Record<string, string>> {
+  try {
+    const raw = await AsyncStorage.getItem(AUDIO_MAP_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function withAudio(entry: DiaryEntry, audioMap: Record<string, string>): DiaryEntry {
+  const audioUri = audioMap[entry.date];
+  return audioUri ? { ...entry, audioUri } : entry;
+}
+
 export const useDiaryStore = create<DiaryState>((set, get) => ({
   entries: {},
+  audioMap: {},
   loaded: false,
   loadEntries: async (year, month) => {
+    const audioMap = get().loaded ? get().audioMap : await loadAudioMap();
     const token = useAppStore.getState().accessToken;
     if (token && year && month) {
       try {
         const response = await getMonthlyDiary(year, month);
         const monthlyEntries = response.data.entries.reduce<Record<string, DiaryEntry>>((acc, entry) => {
-          const diaryEntry = fromApiEntry(entry);
+          const diaryEntry = withAudio(fromApiEntry(entry), audioMap);
           acc[diaryEntry.date] = diaryEntry;
           return acc;
         }, {});
@@ -53,7 +75,7 @@ export const useDiaryStore = create<DiaryState>((set, get) => ({
           const entries = Object.fromEntries(
             Object.entries(state.entries).filter(([date]) => !isSameMonth(date, year, month))
           );
-          return { entries: { ...entries, ...monthlyEntries }, loaded: true };
+          return { entries: { ...entries, ...monthlyEntries }, audioMap, loaded: true };
         });
         return;
       } catch (e) {
@@ -64,19 +86,34 @@ export const useDiaryStore = create<DiaryState>((set, get) => ({
     try {
       const raw = await AsyncStorage.getItem(STORAGE_KEY);
       if (raw) {
-        const entries = JSON.parse(raw) as Record<string, DiaryEntry>;
-        set({ entries, loaded: true });
+        const stored = JSON.parse(raw) as Record<string, DiaryEntry>;
+        const entries = Object.fromEntries(
+          Object.entries(stored).map(([date, entry]) => [date, withAudio(entry, audioMap)])
+        );
+        set({ entries, audioMap, loaded: true });
       } else {
-        set({ loaded: true });
+        set({ audioMap, loaded: true });
       }
     } catch {
-      set({ loaded: true });
+      set({ audioMap, loaded: true });
     }
   },
   saveEntry: async (entry) => {
     const existed = !!get().entries[entry.date];
     const prevEntries = get().entries;
-    set({ entries: { ...prevEntries, [entry.date]: entry } });
+    const prevAudioMap = get().audioMap;
+    const prevAudioUri = prevAudioMap[entry.date];
+
+    const audioMap = { ...prevAudioMap };
+    let nextEntry = entry;
+    if (entry.audioUri) {
+      audioMap[entry.date] = entry.audioUri;
+    } else if (prevAudioUri) {
+      // 오디오 없이 저장(코멘트/무드 수정 등) — 기존 녹음 유지
+      nextEntry = { ...entry, audioUri: prevAudioUri };
+    }
+
+    set({ entries: { ...prevEntries, [entry.date]: nextEntry }, audioMap });
 
     const token = useAppStore.getState().accessToken;
     if (token) {
@@ -88,21 +125,34 @@ export const useDiaryStore = create<DiaryState>((set, get) => ({
           await createDiary({ peakDb: entry.db, emoji: entry.mood, date: entry.date, comment: entry.comment });
         }
       } catch (e) {
-        set({ entries: prevEntries }); // 낙관적 업데이트 롤백
+        set({ entries: prevEntries, audioMap: prevAudioMap }); // 낙관적 업데이트 롤백
+        if (entry.audioUri && entry.audioUri !== prevAudioUri) {
+          deleteRecording(entry.audioUri); // 롤백으로 고아가 된 신규 녹음 파일 정리
+        }
         showErrorAlert(e, '다이어리 저장 실패');
         return; // AsyncStorage에 실패한 상태 저장 방지
       }
     }
 
+    // 새 녹음이 이전 녹음을 대체했다면 이전 파일 정리
+    if (entry.audioUri && prevAudioUri && prevAudioUri !== entry.audioUri) {
+      deleteRecording(prevAudioUri);
+    }
+
     try {
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(get().entries));
+      await AsyncStorage.setItem(AUDIO_MAP_KEY, JSON.stringify(get().audioMap));
     } catch {}
   },
   deleteEntry: async (date) => {
     const prevEntries = get().entries;
+    const prevAudioMap = get().audioMap;
     const entries = { ...prevEntries };
     delete entries[date];
-    set({ entries });
+    const audioMap = { ...prevAudioMap };
+    const audioUri = audioMap[date];
+    delete audioMap[date];
+    set({ entries, audioMap });
 
     const token = useAppStore.getState().accessToken;
     if (token) {
@@ -110,14 +160,19 @@ export const useDiaryStore = create<DiaryState>((set, get) => ({
         await deleteDiary(date);
         Toast.success('다이어리를 삭제했어요.');
       } catch (e) {
-        set({ entries: prevEntries });
+        set({ entries: prevEntries, audioMap: prevAudioMap });
         showErrorAlert(e, '다이어리 삭제 실패');
         return;
       }
     }
 
+    if (audioUri) {
+      deleteRecording(audioUri);
+    }
+
     try {
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(get().entries));
+      await AsyncStorage.setItem(AUDIO_MAP_KEY, JSON.stringify(get().audioMap));
     } catch {}
   },
 }));

@@ -20,7 +20,7 @@ export interface MicDbState {
   hasPermission: boolean | null;
   isRecording: boolean;
   start: () => Promise<boolean>;
-  stop: () => Promise<void>;
+  stop: () => Promise<string | null>;
   reset: () => void;
   getDb: () => number;
   getPeak: () => number;
@@ -126,12 +126,15 @@ export function useMicDb(): MicDbState {
     // ref를 먼저 null로 비워 start()와의 동시 접근(race condition) 방지
     const recording = recordingRef.current;
     recordingRef.current = null;
+    let uri: string | null = null;
     if (recording) {
+      uri = recording.getURI();
       try {
         await recording.stopAndUnloadAsync();
       } catch {}
     }
     setIsRecording(false);
+    return uri;
   }, []);
 
   const reset = useCallback(() => {

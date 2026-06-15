@@ -36,6 +36,7 @@ export default function SoloMeasureScreen({ navigation, route }: Props) {
   const [prevPeak, setPrevPeak] = useState(0);
   const [soloBest, setSoloBest] = useState(0);
   const [diarySheetVisible, setDiarySheetVisible] = useState(false);
+  const [recordedUri, setRecordedUri] = useState<string | null>(null);
   const [diarySavedToastVisible, setDiarySavedToastVisible] = useState(false);
   const [soloRecordLoadFailed, setSoloRecordLoadFailed] = useState(false);
   const [isRetryingSoloRecord, setIsRetryingSoloRecord] = useState(false);
@@ -121,7 +122,7 @@ export default function SoloMeasureScreen({ navigation, route }: Props) {
   // 측정 종료
   useEffect(() => {
     if (phase !== 'measuring' || timer > 0) return;
-    mic.stop();
+    mic.stop().then((uri) => setRecordedUri(uri));
 
     Animated.sequence([
       Animated.timing(flashAnim, { toValue: 1, duration: 80, useNativeDriver: false }),
@@ -171,6 +172,7 @@ export default function SoloMeasureScreen({ navigation, route }: Props) {
   const handleRetry = () => {
     mic.reset();
     setPeakResult(0);
+    setRecordedUri(null);
     setIsNewBest(false);
     setDiarySheetVisible(false);
     setDiarySavedToastVisible(false);
@@ -410,6 +412,7 @@ export default function SoloMeasureScreen({ navigation, route }: Props) {
       <QuickLogSheet
         visible={diarySheetVisible}
         initialDb={peakResult}
+        audioUri={recordedUri}
         onClose={() => setDiarySheetVisible(false)}
         onSaved={() => {
           if (diaryMode) {
