@@ -245,7 +245,8 @@ export default function MicTestScreen({ navigation }: Props) {
           <View style={styles.privacyRow}>
             <Ionicons name="lock-closed-outline" size={20} color={C.textDim} style={styles.lockIcon} />
             <Text style={styles.privacyText}>
-              녹음 파일은 서버로 전송되지 않아. 측정값(dB)만 기록돼.
+              다이어리에 남긴 녹음은 내 폰에만 저장돼. 서버로 전송되지 않고, 다른 사람에게
+              공개되지 않아.
             </Text>
           </View>
         </Card>
