@@ -281,6 +281,97 @@ export function VizScrollWave({ value, max = 140, width = 320, height = 160, col
   );
 }
 
+// 6. SIGNATURE WAVE — static decorative waveform, deterministic per seed+db
+interface SignatureWaveProps {
+  db: number;
+  seed: string;
+  width?: number;
+  height?: number;
+  cols?: number;
+}
+
+function seededRand(seedStr: string) {
+  let h = 1779033703 ^ seedStr.length;
+  for (let i = 0; i < seedStr.length; i++) {
+    h = Math.imul(h ^ seedStr.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  return () => {
+    h = Math.imul(h ^ (h >>> 16), 2246822519);
+    h = Math.imul(h ^ (h >>> 13), 3266489917);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  };
+}
+
+function hexToRgb(hex: string) {
+  const v = hex.replace('#', '');
+  return {
+    r: parseInt(v.substring(0, 2), 16),
+    g: parseInt(v.substring(2, 4), 16),
+    b: parseInt(v.substring(4, 6), 16),
+  };
+}
+
+function mixColor(c1: string, c2: string, t: number) {
+  const a = hexToRgb(c1);
+  const b = hexToRgb(c2);
+  const r = Math.round(a.r + (b.r - a.r) * t);
+  const g = Math.round(a.g + (b.g - a.g) * t);
+  const bl = Math.round(a.b + (b.b - a.b) * t);
+  return `rgb(${r}, ${g}, ${bl})`;
+}
+
+function waveBarColor(pct: number) {
+  if (pct < 0.5) return mixColor(C.cyan, C.purple, pct / 0.5);
+  return mixColor(C.purple, C.pink, (pct - 0.5) / 0.5);
+}
+
+export function VizSignatureWave({ db, seed, width = 280, height = 72, cols = 28 }: SignatureWaveProps) {
+  const base = Math.min(1, Math.max(0.12, db / 140));
+  const rand = seededRand(`${seed}:${db}`);
+  const bars: number[] = [];
+  for (let i = 0; i < cols; i++) {
+    const variance = 0.4 + rand() * 0.6;
+    const center = 1 - (Math.abs(i - (cols - 1) / 2) / ((cols - 1) / 2)) * 0.35;
+    bars.push(Math.min(1, Math.max(0.1, base * variance * center)));
+  }
+  let peakIndex = 0;
+  bars.forEach((v, i) => { if (v > bars[peakIndex]) peakIndex = i; });
+  const barW = width / cols;
+
+  return (
+    <View style={{ width, height, flexDirection: 'row', alignItems: 'flex-end' }}>
+      {bars.map((pct, i) => (
+        <View key={i} style={{ width: barW, height: '100%', alignItems: 'center', justifyContent: 'flex-end' }}>
+          {i === peakIndex && (
+            <View
+              style={{
+                position: 'absolute',
+                top: 0,
+                bottom: 0,
+                left: barW / 2,
+                borderLeftWidth: 1,
+                borderLeftColor: `${C.yellow}80`,
+                borderStyle: 'dashed',
+              }}
+            />
+          )}
+          <View
+            style={{
+              width: Math.max(2, barW - 2),
+              height: Math.max(3, pct * height),
+              borderRadius: 2,
+              backgroundColor: waveBarColor(pct),
+              opacity: 0.88,
+            }}
+          />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 // Animated wrapper that re-renders on value change with smooth transition
 interface DbVizProps extends VizProps {
   style?: 'radial' | 'column' | 'waveform' | 'pulse';

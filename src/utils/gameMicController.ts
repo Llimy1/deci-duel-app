@@ -20,7 +20,7 @@ export type MicLifecycleStatus = 'idle' | 'starting' | 'ready' | 'failed';
 
 export interface GameMicInterface {
   start: () => Promise<boolean>;
-  stop: () => Promise<void>;
+  stop: () => Promise<unknown>;
   reset: () => void;
 }
 

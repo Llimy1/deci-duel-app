@@ -89,11 +89,13 @@ export default function DayDetailScreen({ navigation, route }: Props) {
             <TextInput
               style={styles.commentInput}
               value={comment}
-              onChangeText={(t) => setComment(t.slice(0, 15))}
+              onChangeText={(t) => setComment(t.slice(0, 200))}
               placeholder="코멘트 입력"
               placeholderTextColor={C.textMute}
               autoFocus
-              maxLength={15}
+              maxLength={200}
+              multiline
+              textAlignVertical="top"
             />
             <Btn variant="primary" size="md" onPress={handleSave}>저장</Btn>
           </View>
@@ -179,16 +181,17 @@ const styles = StyleSheet.create({
     gap: S[3],
   },
   commentInput: {
-    height: 48,
+    minHeight: 100,
+    maxHeight: 200,
     backgroundColor: C.surface2,
     borderRadius: R.md,
     borderWidth: 1,
     borderColor: C.line,
     paddingHorizontal: S[3],
+    paddingVertical: S[2],
     fontFamily: FONTS.body,
     fontSize: FS.md,
     color: C.text,
-    textAlign: 'center',
   },
   btnRow: {
     flexDirection: 'row',

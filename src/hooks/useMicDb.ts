@@ -8,6 +8,10 @@ import { Audio } from 'expo-av';
 import { requestRecordingPermissionsAsync } from 'expo-audio';
 
 const CALIBRATION_OFFSET = 100; // dBFS → approx dB SPL
+// 순간 충격(탭/손뼉 등)이 지속 소리보다 높게 측정되는 문제 방지.
+// EMA로 지속 소리는 실제값에 수렴하고 순간 스파이크는 감쇠.
+// alpha=0.4, 60ms 간격 기준 → 300ms 지속 시 실제값의 92% 도달.
+const SMOOTHING_ALPHA = 0.4;
 
 // expo-av Android 네이티브(AVManager.java)는 20*Math.log(amplitude/32767)로 계산 —
 // 표준 dBFS(20*log10)가 아닌 자연로그(ln) 기반이라 같은 소리도 iOS보다 값이 낮음.
@@ -20,7 +24,7 @@ export interface MicDbState {
   hasPermission: boolean | null;
   isRecording: boolean;
   start: () => Promise<boolean>;
-  stop: () => Promise<void>;
+  stop: () => Promise<string | null>;
   reset: () => void;
   getDb: () => number;
   getPeak: () => number;
@@ -105,9 +109,10 @@ export function useMicDb(): MicDbState {
             : status.metering;
           const raw = normalized + CALIBRATION_OFFSET;
           const clamped = Math.max(0, Math.min(140, raw));
-          dbRef.current = clamped;
-          peakRef.current = Math.max(peakRef.current, clamped);
-          setDb(clamped);
+          const smoothed = SMOOTHING_ALPHA * clamped + (1 - SMOOTHING_ALPHA) * dbRef.current;
+          dbRef.current = smoothed;
+          peakRef.current = Math.max(peakRef.current, smoothed);
+          setDb(smoothed);
           setPeak(peakRef.current);
         }
       }, 60);
@@ -126,12 +131,15 @@ export function useMicDb(): MicDbState {
     // ref를 먼저 null로 비워 start()와의 동시 접근(race condition) 방지
     const recording = recordingRef.current;
     recordingRef.current = null;
+    let uri: string | null = null;
     if (recording) {
+      uri = recording.getURI();
       try {
         await recording.stopAndUnloadAsync();
       } catch {}
     }
     setIsRecording(false);
+    return uri;
   }, []);
 
   const reset = useCallback(() => {

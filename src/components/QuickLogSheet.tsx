@@ -10,34 +10,47 @@ import {
   Platform,
   useWindowDimensions,
 } from 'react-native';
-import { C, FONTS, FS, S, R } from '../theme';
+import { C, FONTS, FS, R, S } from '../theme';
 import { Btn } from './ui';
 import { VizScrollWave } from './DbViz';
+import { MoodEmoji, MoodRow } from './MoodPicker';
+import AudioPlayer from './AudioPlayer';
 import { useDiaryStore } from '../store/diaryStore';
 import { useMicDb } from '../hooks/useMicDb';
 import { Toast } from '../utils/toast';
+import { persistRecording } from '../utils/audioStorage';
 
 interface Props {
   visible: boolean;
   onClose: () => void;
   onSaved?: () => void;
   initialDb?: number;
+  /** 솔로 측정 화면에서 녹음한 임시 오디오 파일 경로 */
+  audioUri?: string | null;
 }
 
-const MOODS = ['😆', '😎', '🔥', '💢', '🥺', '😤', '😭'];
-const MAX_COMMENT = 15;
+const MAX_COMMENT = 200;
+
+function dbColor(db: number): string {
+  if (db >= 110) return C.pink;
+  if (db >= 90) return C.yellow;
+  return C.cyan;
+}
 
 export default function QuickLogSheet({
-  visible, onClose, onSaved, initialDb,
+  visible, onClose, onSaved, initialDb, audioUri,
 }: Props) {
   const { width } = useWindowDimensions();
   const [measuring, setMeasuring] = useState(false);
   const [timer, setTimer] = useState(5);
   const [mood, setMood] = useState('😎');
   const [comment, setComment] = useState('');
+  const [recordedUri, setRecordedUri] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const saveEntry = useDiaryStore((s) => s.saveEntry);
   const mic = useMicDb();
   const resultMode = initialDb !== undefined;
+  const playbackUri = audioUri ?? recordedUri;
 
   useEffect(() => {
     if (!measuring) return;
@@ -46,7 +59,7 @@ export default function QuickLogSheet({
         const next = Math.max(0, parseFloat((t - 0.1).toFixed(1)));
         if (next <= 0) {
           setMeasuring(false);
-          mic.stop();
+          mic.stop().then((uri) => setRecordedUri(uri));
         }
         return next;
       });
@@ -54,14 +67,25 @@ export default function QuickLogSheet({
     return () => clearInterval(id);
   }, [measuring, mic.stop]);
 
-  const handleSave = () => {
-    const today = new Date().toISOString().slice(0, 10);
-    saveEntry({ date: today, db: Math.round(initialDb ?? (mic.peak || mic.db)), mood, comment });
+  const handleSave = async () => {
+    if (saving) return;
+    setSaving(true);
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    let savedAudioUri: string | undefined;
+    if (playbackUri) {
+      try {
+        savedAudioUri = await persistRecording(playbackUri, today);
+      } catch {}
+    }
+    await saveEntry({ date: today, db: Math.round(initialDb ?? (mic.peak || mic.db)), mood, comment, audioUri: savedAudioUri });
     mic.reset();
+    setRecordedUri(null);
     setTimer(5);
     setMeasuring(false);
     setMood('😎');
     setComment('');
+    setSaving(false);
     onSaved?.();
     onClose();
   };
@@ -70,6 +94,7 @@ export default function QuickLogSheet({
     if (!measuring) {
       setTimer(5);
       mic.reset();
+      setRecordedUri(null);
       const started = await mic.start();
       if (!started) {
         Toast.error('마이크를 시작할 수 없습니다.');
@@ -77,7 +102,8 @@ export default function QuickLogSheet({
       }
       setMeasuring(true);
     } else {
-      await mic.stop();
+      const uri = await mic.stop();
+      setRecordedUri(uri);
       setMeasuring(false);
       setTimer(5);
     }
@@ -85,6 +111,7 @@ export default function QuickLogSheet({
 
   const handleClose = () => {
     mic.reset();
+    setRecordedUri(null);
     setMeasuring(false);
     setTimer(5);
     onClose();
@@ -99,27 +126,39 @@ export default function QuickLogSheet({
       <Pressable style={styles.backdrop} onPress={handleClose} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.sheetWrap}>
         <View style={styles.sheet}>
+          {resultMode && <View style={styles.glowPurple} />}
+          {resultMode && <View style={styles.glowPink} />}
           <View style={styles.handle} />
 
           <View style={styles.headerRow}>
-            <Text style={styles.sheetTitle}>{resultMode ? 'SAVE LOG' : 'QUICK LOG'}</Text>
+            <Text style={styles.sheetTitle}>{resultMode ? '다이어리 기록' : '측정하기'}</Text>
             <Pressable onPress={handleClose} style={styles.closeBtn}>
               <Text style={styles.closeText}>×</Text>
             </Pressable>
           </View>
 
-          <View style={styles.vizWrap}>
-            {!resultMode && (
-              <VizScrollWave value={liveDb} width={waveWidth} height={58} cols={42} />
-            )}
-            <View style={styles.dbRow}>
-              <Text style={styles.dbValue}>{displayDb}</Text>
-              <Text style={styles.dbUnit}>dB</Text>
+          {resultMode ? (
+            <View style={styles.entryDbRow}>
+              <View style={styles.entryEmojiWrap}>
+                <MoodEmoji emoji={mood} size={46} />
+              </View>
+              <View style={styles.entryDbNumWrap}>
+                <Text style={[styles.entryDbValue, { color: dbColor(displayDb) }]}>{displayDb}</Text>
+                <Text style={styles.entryDbUnit}>dB</Text>
+              </View>
             </View>
-            <Text style={styles.measureMeta}>
-              PEAK {Math.round(initialDb ?? mic.peak)} dB · {resultMode ? 'ADD MOOD' : measuring ? `${timer.toFixed(1)}s LEFT` : 'TAP TO START'}
-            </Text>
-          </View>
+          ) : (
+            <View style={styles.vizWrap}>
+              <VizScrollWave value={liveDb} width={waveWidth} height={58} cols={42} />
+              <View style={styles.dbRow}>
+                <Text style={styles.dbValue}>{displayDb}</Text>
+                <Text style={styles.dbUnit}>dB</Text>
+              </View>
+              <Text style={styles.measureMeta}>
+                최고 {Math.round(mic.peak)}dB · {measuring ? `${timer.toFixed(1)}초 남음` : '탭하여 측정 시작'}
+              </Text>
+            </View>
+          )}
 
           {!resultMode && (
             <Btn variant={measuring ? 'ghost' : 'cyan'} size="md" full onPress={handleMeasureToggle}>
@@ -127,33 +166,27 @@ export default function QuickLogSheet({
             </Btn>
           )}
 
+          {resultMode && playbackUri && <AudioPlayer uri={playbackUri} />}
+
           <Text style={styles.sectionLabel}>무드</Text>
-          <View style={styles.moodRow}>
-            {MOODS.map((m) => (
-              <Pressable
-                key={m}
-                onPress={() => setMood(m)}
-                style={[styles.moodChip, mood === m && styles.moodChipSelected]}
-              >
-                <Text style={styles.moodEmoji}>{m}</Text>
-              </Pressable>
-            ))}
-          </View>
+          <MoodRow mood={mood} onSelect={setMood} />
 
           <Text style={styles.sectionLabel}>코멘트</Text>
-          <View style={styles.commentWrap}>
+          <View style={styles.commentInputWrap}>
             <TextInput
               style={styles.commentInput}
               value={comment}
               onChangeText={(t) => setComment(t.slice(0, MAX_COMMENT))}
-              placeholder="오늘의 한 마디"
+              placeholder="오늘의 이야기를 적어보세요"
               placeholderTextColor={C.textMute}
               maxLength={MAX_COMMENT}
+              multiline
+              textAlignVertical="top"
             />
             <Text style={styles.commentCounter}>{comment.length}/{MAX_COMMENT}</Text>
           </View>
 
-          <Btn variant="yellow" size="md" full onPress={handleSave} style={{ marginTop: S[2] }}>
+          <Btn variant="yellow" size="md" full onPress={handleSave} disabled={saving} style={{ marginTop: S[2] }}>
             저장
           </Btn>
         </View>
@@ -180,6 +213,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: `${C.purple}66`,
     gap: S[2],
+    overflow: 'hidden',
+  },
+  glowPurple: {
+    position: 'absolute',
+    top: -60,
+    left: -40,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: `${C.purple}33`,
+  },
+  glowPink: {
+    position: 'absolute',
+    top: -30,
+    right: -60,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: `${C.pink}26`,
   },
   handle: {
     width: 56,
@@ -246,48 +298,50 @@ const styles = StyleSheet.create({
     color: C.textMute,
     letterSpacing: 1.5,
   },
-  moodRow: {
+  entryDbRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: S[1],
+    alignItems: 'center',
+    gap: S[3],
+    paddingTop: S[1],
   },
-  moodChip: {
-    width: 40,
-    height: 40,
-    borderRadius: R.md,
+  entryEmojiWrap: {
+    height: 56,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#13091f',
-    borderWidth: 1,
-    borderColor: C.line,
   },
-  moodChipSelected: {
-    borderColor: C.pink,
-    backgroundColor: `${C.pink}22`,
+  entryDbNumWrap: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
   },
-  moodEmoji: {
-    fontSize: 21,
+  entryDbValue: {
+    fontFamily: FONTS.headBold,
+    fontSize: FS['4xl'],
+    lineHeight: 56,
   },
-  commentWrap: {
-    position: 'relative',
+  entryDbUnit: {
+    fontFamily: FONTS.monoBold,
+    fontSize: FS.md,
+    color: C.pink,
+  },
+  commentInputWrap: {
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: R.md,
+    padding: S[3],
   },
   commentInput: {
-    height: 52,
-    backgroundColor: '#12091d',
-    borderRadius: R.md,
-    borderWidth: 1,
-    borderColor: C.line,
-    paddingHorizontal: S[4],
-    paddingRight: 50,
+    minHeight: 100,
+    maxHeight: 220,
     fontFamily: FONTS.body,
     fontSize: FS.md,
+    lineHeight: FS.md * 1.6,
     color: C.text,
+    paddingRight: 56,
   },
   commentCounter: {
     position: 'absolute',
-    right: S[3],
-    top: '50%',
-    transform: [{ translateY: -8 }],
+    right: 0,
+    bottom: 4,
     fontFamily: FONTS.mono,
     fontSize: FS.xs,
     color: C.textMute,

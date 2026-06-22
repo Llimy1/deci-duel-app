@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   View,
   Text,
   Pressable,
@@ -13,6 +15,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Btn } from '../../components/ui';
+import { MoodEmoji, MoodRow } from '../../components/MoodPicker';
+import AudioPlayer from '../../components/AudioPlayer';
 import { C, FONTS, FS, R, S } from '../../theme';
 import { useDiaryStore } from '../../store/diaryStore';
 import type { DiaryStackParamList } from '../../navigation/types';
@@ -21,7 +25,7 @@ type Props = NativeStackScreenProps<DiaryStackParamList, 'Calendar'>;
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const MONTH_NAMES = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
-const MOODS = ['😆', '😎', '🔥', '💢', '🥺', '😤', '😭'];
+const MAX_COMMENT = 200;
 const FIRST_APP_YEAR = 2026;
 const FIRST_APP_MONTH = 4;
 
@@ -100,6 +104,14 @@ export default function CalendarScreen({ navigation }: Props) {
   const highestDb = daysLogged > 0
     ? Math.max(...monthEntries.map(e => e.db))
     : 0;
+
+  let streak = 0;
+  if (year === now.getFullYear() && month === now.getMonth()) {
+    for (let d = now.getDate(); d >= 1; d--) {
+      if (entries[dateKey(d)]) streak++;
+      else break;
+    }
+  }
   const selectedEntry = selectedDate ? entries[selectedDate] : null;
 
   const openDetailSheet = (date: string) => {
@@ -147,6 +159,14 @@ export default function CalendarScreen({ navigation }: Props) {
           <Text style={styles.title}>다이어리</Text>
           <View style={{ width: 36 }} />
         </View>
+
+        {streak > 0 && (
+          <View style={styles.streakRow}>
+            <View style={styles.streakBadge}>
+              <Text style={styles.streakText}>🔥 이번 달 {streak}일 연속 기록 중</Text>
+            </View>
+          </View>
+        )}
 
         {/* Month switcher */}
         <View style={styles.monthRow}>
@@ -208,7 +228,9 @@ export default function CalendarScreen({ navigation }: Props) {
                 <Text style={[styles.cellDay, { color: entry ? c! : isToday ? todayColor : C.textMute }]}>{day}</Text>
                 {entry && (
                   <>
-                    <Text style={styles.cellEmoji}>{entry.mood}</Text>
+                    <View style={styles.cellEmojiWrap}>
+                      <MoodEmoji emoji={entry.mood} size={22} />
+                    </View>
                     <Text style={[styles.cellDb, { color: c! }]}>{entry.db}</Text>
                   </>
                 )}
@@ -238,65 +260,74 @@ export default function CalendarScreen({ navigation }: Props) {
 
       <Modal visible={!!selectedEntry} transparent animationType="slide" onRequestClose={closeDetailSheet}>
         <Pressable style={styles.sheetBackdrop} onPress={closeDetailSheet} />
-        {selectedEntry && selectedDate && (
-          <View style={styles.detailSheet}>
-            <View style={styles.sheetHandle} />
-            <View style={styles.sheetHeader}>
-              <View>
-                <Text style={styles.sheetLabel}>다이어리 기록</Text>
-                <Text style={styles.sheetDate}>{selectedDate.replaceAll('-', '.')}</Text>
-              </View>
-              <Pressable onPress={closeDetailSheet} style={styles.sheetCloseBtn}>
-                <Text style={styles.sheetCloseText}>×</Text>
-              </Pressable>
-            </View>
-
-            <View style={styles.detailBody}>
-              <Text style={styles.detailMood}>{editing ? selectedMood : selectedEntry.mood}</Text>
-              <View style={styles.detailDbWrap}>
-                <Text style={[styles.detailDb, { color: dbColor(selectedEntry.db) }]}>{selectedEntry.db}</Text>
-                <Text style={styles.detailUnit}>dB</Text>
-              </View>
-            </View>
-
-            {editing ? (
-              <View style={styles.editWrap}>
-                <View style={styles.editMoodRow}>
-                  {MOODS.map((mood) => (
-                    <Pressable
-                      key={mood}
-                      onPress={() => setSelectedMood(mood)}
-                      style={[styles.editMoodChip, selectedMood === mood && styles.editMoodChipSelected]}
-                    >
-                      <Text style={styles.editMoodText}>{mood}</Text>
-                    </Pressable>
-                  ))}
+        <KeyboardAvoidingView
+          style={styles.sheetKeyboardWrap}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          pointerEvents="box-none"
+        >
+          {selectedEntry && selectedDate && (
+            <View style={styles.detailSheet}>
+              <View style={styles.glowPurple} />
+              <View style={styles.glowPink} />
+              <View style={styles.sheetHandle} />
+              <View style={styles.sheetHeader}>
+                <View>
+                  <Text style={styles.sheetLabel}>다이어리 기록</Text>
+                  <Text style={styles.entryDate}>{selectedDate.replaceAll('-', '.')}</Text>
                 </View>
-                <TextInput
-                  style={styles.commentInput}
-                  value={comment}
-                  onChangeText={(text) => setComment(text.slice(0, 15))}
-                  placeholder="코멘트 입력"
-                  placeholderTextColor={C.textMute}
-                  maxLength={15}
-                  autoFocus
-                />
-                <Btn variant="primary" size="md" full onPress={handleDetailSave}>저장</Btn>
+                <Pressable onPress={closeDetailSheet} style={styles.sheetCloseBtn}>
+                  <Text style={styles.sheetCloseText}>×</Text>
+                </Pressable>
               </View>
-            ) : (
-              <Text style={styles.detailComment}>{selectedEntry.comment || '코멘트 없음'}</Text>
-            )}
 
-            <View style={styles.detailActions}>
-              <View style={styles.detailAction}>
-                <Btn variant="ghost" size="md" full onPress={() => setEditing(true)}>수정</Btn>
+              <View style={styles.entryDbRow}>
+                <View style={styles.entryEmojiWrap}>
+                  <MoodEmoji emoji={editing ? selectedMood : selectedEntry.mood} size={46} />
+                </View>
+                <View style={styles.entryDbNumWrap}>
+                  <Text style={[styles.entryDbValue, { color: dbColor(selectedEntry.db) }]}>{selectedEntry.db}</Text>
+                  <Text style={styles.entryDbUnit}>dB</Text>
+                </View>
               </View>
-              <View style={styles.detailAction}>
-                <Btn variant="outline" size="md" full onPress={handleDelete}>삭제</Btn>
+
+              {selectedEntry.audioUri && <AudioPlayer uri={selectedEntry.audioUri} />}
+
+              {editing ? (
+                <View style={styles.editWrap}>
+                  <MoodRow mood={selectedMood} onSelect={setSelectedMood} />
+                  <View style={styles.commentInputWrap}>
+                    <TextInput
+                      style={styles.commentInput}
+                      value={comment}
+                      onChangeText={(text) => setComment(text.slice(0, MAX_COMMENT))}
+                      placeholder="오늘의 이야기를 적어보세요"
+                      placeholderTextColor={C.textMute}
+                      maxLength={MAX_COMMENT}
+                      multiline
+                      textAlignVertical="top"
+                      autoFocus
+                    />
+                    <Text style={styles.commentCounter}>{comment.length}/{MAX_COMMENT}</Text>
+                  </View>
+                  <Btn variant="primary" size="md" full onPress={handleDetailSave}>저장</Btn>
+                </View>
+              ) : (
+                <ScrollView style={styles.commentScroll}>
+                  <Text style={styles.detailComment}>{selectedEntry.comment || '코멘트 없음'}</Text>
+                </ScrollView>
+              )}
+
+              <View style={styles.detailActions}>
+                <View style={styles.detailAction}>
+                  <Btn variant="ghost" size="md" full onPress={() => setEditing(true)}>수정</Btn>
+                </View>
+                <View style={styles.detailAction}>
+                  <Btn variant="outline" size="md" full onPress={handleDelete}>삭제</Btn>
+                </View>
               </View>
             </View>
-          </View>
-        )}
+          )}
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -321,6 +352,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: S[5],
     paddingTop: S[2],
     paddingBottom: S[3],
+  },
+  streakRow: {
+    alignItems: 'center',
+    marginBottom: S[3],
+  },
+  streakBadge: {
+    backgroundColor: `${C.lime}1f`,
+    borderWidth: 1,
+    borderColor: `${C.lime}66`,
+    borderRadius: R.pill,
+    paddingHorizontal: S[3],
+    paddingVertical: 6,
+  },
+  streakText: {
+    fontFamily: FONTS.mono,
+    fontSize: FS.xs,
+    letterSpacing: 0.5,
+    color: C.lime,
   },
   title: {
     fontFamily: FONTS.headBold,
@@ -396,13 +445,14 @@ const styles = StyleSheet.create({
     top: 3,
     left: 5,
   },
-  cellEmoji: {
-    fontSize: 16,
-    lineHeight: 18,
+  cellEmojiWrap: {
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   cellDb: {
     fontFamily: FONTS.monoBold,
-    fontSize: FS.xs,
+    fontSize: FS.sm,
   },
   legend: {
     flexDirection: 'row',
@@ -446,6 +496,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.52)',
   },
+  sheetKeyboardWrap: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
   detailSheet: {
     position: 'absolute',
     left: 0,
@@ -460,6 +517,25 @@ const styles = StyleSheet.create({
     paddingTop: S[3],
     paddingBottom: S[6],
     gap: S[3],
+    overflow: 'hidden',
+  },
+  glowPurple: {
+    position: 'absolute',
+    top: -60,
+    left: -40,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: `${C.purple}33`,
+  },
+  glowPink: {
+    position: 'absolute',
+    top: -30,
+    right: -60,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: `${C.pink}26`,
   },
   sheetHandle: {
     width: 56,
@@ -470,20 +546,15 @@ const styles = StyleSheet.create({
   },
   sheetHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
   },
   sheetLabel: {
     fontFamily: FONTS.bodySemibold,
-    fontSize: FS.xs,
+    fontSize: FS.sm,
     letterSpacing: 0,
     color: C.textMute,
     marginBottom: 4,
-  },
-  sheetDate: {
-    fontFamily: FONTS.headBold,
-    fontSize: FS.lg,
-    color: C.text,
   },
   sheetCloseBtn: {
     width: 40,
@@ -497,79 +568,69 @@ const styles = StyleSheet.create({
     lineHeight: 34,
     color: C.textDim,
   },
-  detailBody: {
+  entryDate: {
+    fontFamily: FONTS.headBold,
+    fontSize: FS.xl,
+    color: C.text,
+  },
+  entryDbRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: S[3],
+  },
+  entryEmojiWrap: {
+    height: 56,
+    alignItems: 'center',
     justifyContent: 'center',
-    gap: S[4],
   },
-  detailMood: {
-    fontSize: 48,
-    lineHeight: 54,
-  },
-  detailDbWrap: {
+  entryDbNumWrap: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 5,
+    alignItems: 'baseline',
+    gap: 6,
   },
-  detailDb: {
+  entryDbValue: {
     fontFamily: FONTS.headBold,
-    fontSize: FS['3xl'],
-    lineHeight: 40,
+    fontSize: FS['4xl'],
+    lineHeight: 56,
   },
-  detailUnit: {
-    fontFamily: FONTS.mono,
-    fontSize: FS.sm,
-    color: C.textDim,
-    paddingBottom: 7,
+  entryDbUnit: {
+    fontFamily: FONTS.monoBold,
+    fontSize: FS.md,
+    color: C.pink,
+  },
+  commentScroll: {
+    maxHeight: 200,
   },
   detailComment: {
-    minHeight: 42,
-    borderRadius: R.md,
-    borderWidth: 1,
-    borderColor: C.line,
-    backgroundColor: C.surfaceDeep,
-    paddingHorizontal: S[4],
-    paddingVertical: S[3],
     fontFamily: FONTS.body,
     fontSize: FS.md,
+    lineHeight: FS.md * 1.85,
     color: C.textDim,
   },
   editWrap: {
-    gap: S[2],
+    gap: S[3],
   },
-  editMoodRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: S[1],
-  },
-  editMoodChip: {
-    width: 44,
-    height: 44,
+  commentInputWrap: {
+    backgroundColor: 'rgba(255,255,255,0.03)',
     borderRadius: R.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: C.surfaceDeep,
-    borderWidth: 1,
-    borderColor: C.line,
-  },
-  editMoodChipSelected: {
-    borderColor: C.pink,
-    backgroundColor: `${C.pink}22`,
-  },
-  editMoodText: {
-    fontSize: 21,
+    padding: S[3],
   },
   commentInput: {
-    height: 48,
-    borderRadius: R.md,
-    borderWidth: 1,
-    borderColor: C.line,
-    backgroundColor: C.surfaceDeep,
-    paddingHorizontal: S[4],
+    minHeight: 100,
+    maxHeight: 220,
     fontFamily: FONTS.body,
     fontSize: FS.md,
+    lineHeight: FS.md * 1.6,
     color: C.text,
+    paddingRight: 56,
+  },
+  commentCounter: {
+    position: 'absolute',
+    right: S[3],
+    bottom: S[3],
+    fontFamily: FONTS.mono,
+    fontSize: FS.xs,
+    color: C.textMute,
   },
   detailActions: {
     flexDirection: 'row',
