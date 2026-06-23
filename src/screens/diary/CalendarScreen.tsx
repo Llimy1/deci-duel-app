@@ -282,7 +282,7 @@ export default function CalendarScreen({ navigation }: Props) {
 
               <View style={styles.entryDbRow}>
                 <View style={styles.entryEmojiWrap}>
-                  <MoodEmoji emoji={editing ? selectedMood : selectedEntry.mood} size={46} />
+                  <MoodEmoji emoji={editing ? selectedMood : selectedEntry.mood} size={52} />
                 </View>
                 <View style={styles.entryDbNumWrap}>
                   <Text style={[styles.entryDbValue, { color: dbColor(selectedEntry.db) }]}>{selectedEntry.db}</Text>
@@ -575,13 +575,13 @@ const styles = StyleSheet.create({
   },
   entryDbRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     gap: S[3],
   },
   entryEmojiWrap: {
-    height: 56,
+    height: 52 * 1.2,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
   },
   entryDbNumWrap: {
     flexDirection: 'row',

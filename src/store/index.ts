@@ -1,5 +1,10 @@
 import { create } from 'zustand';
 import type { Me } from '../api/me';
+import { TERMS_VERSION, PRIVACY_VERSION } from '../constants/consent';
+
+function computeNeedsReconsent(me: Pick<Me, 'termsVersion' | 'privacyVersion'>): boolean {
+  return me.termsVersion !== TERMS_VERSION || me.privacyVersion !== PRIVACY_VERSION;
+}
 
 export interface MatchResult {
   mePeak: number;
@@ -41,6 +46,7 @@ interface AppState {
   accessToken: string | null;
   refreshToken: string | null;
   userId: number | null;
+  needsReconsent: boolean;
   pendingOAuthSignup: { provider: 'apple' | 'google' | 'kakao'; signupToken: string } | null;
   setLastResult: (r: MatchResult) => void;
   updateBestDb: (db: number) => void;
@@ -56,6 +62,7 @@ interface AppState {
   setProfileImageUrl: (profileImageUrl: string | null) => void;
   setPendingOAuthSignup: (provider: 'apple' | 'google' | 'kakao', signupToken: string) => void;
   clearPendingOAuthSignup: () => void;
+  clearReconsent: () => void;
   logout: () => void;
 }
 
@@ -81,6 +88,7 @@ export const useAppStore = create<AppState>((set) => ({
   accessToken: null,
   refreshToken: null,
   userId: null,
+  needsReconsent: false,
   pendingOAuthSignup: null,
   setLastResult: (r) => set({ lastResult: r }),
   startMatch: (opponent) =>
@@ -131,6 +139,7 @@ export const useAppStore = create<AppState>((set) => ({
       userId: me.id,
       nickname: me.nickname,
       avatarColor: me.avatarColor,
+      needsReconsent: computeNeedsReconsent(me),
       user: {
         id: me.id,
         name: me.nickname,
@@ -161,6 +170,7 @@ export const useAppStore = create<AppState>((set) => ({
     set({ pendingOAuthSignup: { provider, signupToken } }),
   clearPendingOAuthSignup: () =>
     set({ pendingOAuthSignup: null }),
+  clearReconsent: () => set({ needsReconsent: false }),
   logout: () =>
     set({
       isLoggedIn: false,
@@ -169,6 +179,7 @@ export const useAppStore = create<AppState>((set) => ({
       accessToken: null,
       refreshToken: null,
       userId: null,
+      needsReconsent: false,
       user: emptyUser,
       currentMatch: null,
       lastResult: null,

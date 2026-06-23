@@ -19,6 +19,7 @@ function formatTime(ms: number): string {
 
 export default function AudioPlayer({ uri }: Props) {
   const soundRef = useRef<Audio.Sound | null>(null);
+  const pendingPlayRef = useRef(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -47,6 +48,11 @@ export default function AudioPlayer({ uri }: Props) {
           return;
         }
         soundRef.current = sound;
+        // 로드가 끝나기 전에 사용자가 이미 재생을 눌렀다면, 로드 완료 즉시 재생 시작
+        if (pendingPlayRef.current) {
+          pendingPlayRef.current = false;
+          sound.playAsync().catch(() => {});
+        }
       } catch {}
     };
 
@@ -61,7 +67,11 @@ export default function AudioPlayer({ uri }: Props) {
 
   const toggle = async () => {
     const sound = soundRef.current;
-    if (!sound) return;
+    if (!sound) {
+      // 아직 로드 중 — 로드가 끝나는 즉시 재생되도록 예약
+      pendingPlayRef.current = true;
+      return;
+    }
     try {
       if (isPlaying) {
         await sound.pauseAsync();

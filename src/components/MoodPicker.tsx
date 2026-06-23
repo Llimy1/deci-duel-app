@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import EmojiPicker, { EmojiType } from 'rn-emoji-keyboard';
 import { C, FONTS, R, S } from '../theme';
 
@@ -31,7 +31,11 @@ export function MoodRow({ mood, onSelect, chipSize = 40 }: MoodRowProps) {
 
   return (
     <>
-      <View style={styles.row}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.row}
+      >
         {MOODS.map((m) => (
           <Pressable
             key={m}
@@ -47,7 +51,7 @@ export function MoodRow({ mood, onSelect, chipSize = 40 }: MoodRowProps) {
         >
           <Text style={styles.plus}>+</Text>
         </Pressable>
-      </View>
+      </ScrollView>
       <EmojiPicker
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
@@ -81,7 +85,6 @@ export function MoodRow({ mood, onSelect, chipSize = 40 }: MoodRowProps) {
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: S[2],
   },
   chip: {

@@ -12,6 +12,8 @@ export interface Me {
   losses: number;
   bestDb: number;
   createdAt: string;
+  termsVersion: string | null;
+  privacyVersion: string | null;
 }
 
 export interface ProfileImageAsset {
@@ -33,6 +35,13 @@ export async function updateNickname(nickname: string): Promise<string> {
 export async function updateAvatarColor(avatarColor: string): Promise<string> {
   const response = await apiPatch<{ avatarColor: string }>('/user/me/avatar-color', { avatarColor });
   return response.data.avatarColor;
+}
+
+export async function updateConsent(termsVersion: string, privacyVersion: string): Promise<void> {
+  await apiPatch<{ termsVersion: string; privacyVersion: string }>('/user/me/consent', {
+    termsVersion,
+    privacyVersion,
+  });
 }
 
 export async function logoutFromServer(): Promise<void> {

@@ -91,12 +91,15 @@ export default function LoginScreen({ navigation }: Props) {
     if (!result.isNewUser) {
       await saveTokens(result.accessToken, result.refreshToken);
       setTokens(result.accessToken, result.refreshToken, result.user.id);
-      setAuth(result.user.nickname, C.pink);
-      fetchMeWithRetry()
-        .then(setMe)
-        .catch(() => {
-          Toast.info('프로필 정보를 불러오지 못했습니다. 홈에서 다시 시도할 수 있어요.', 4000);
-        });
+      try {
+        // setMe()가 isLoggedIn과 재동의 필요 여부를 함께 확정하므로,
+        // 먼저 await해 홈 화면이 보였다가 재동의 게이트로 바뀌는 깜빡임을 막는다.
+        const me = await fetchMeWithRetry();
+        setMe(me);
+      } catch {
+        Toast.info('프로필 정보를 불러오지 못했습니다. 홈에서 다시 시도할 수 있어요.', 4000);
+        setAuth(result.user.nickname, C.pink);
+      }
     } else {
       setPendingOAuthSignup(result.provider, result.signupToken);
       navigation.navigate('Nickname');

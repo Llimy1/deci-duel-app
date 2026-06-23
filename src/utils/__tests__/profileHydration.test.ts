@@ -17,6 +17,8 @@ const me = {
   losses: 0,
   bestDb: 97.5,
   createdAt: '2026-06-07T00:00:00.000Z',
+  termsVersion: '1.0',
+  privacyVersion: '1.1',
 };
 
 describe('fetchMeWithRetry', () => {

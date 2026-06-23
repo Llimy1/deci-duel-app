@@ -1,10 +1,10 @@
 # DeciDuel App 진행 상황
 
 ## 마지막 업데이트
-2026-06-14
+2026-06-23
 
 ## 현재 상태
-Apple/Google/Kakao OAuth를 전부 **네이티브 SDK 기반**으로 통일 완료 (Codex [14:14] "정정" 지시 반영 — 2026-06-06의 서버사이드 Authorization Code Flow 결정 폐기). 서버 `POST /auth/oauth`가 Apple/Google idToken, Kakao accessToken을 공통으로 검증하며 audience(`aud`) 검증을 추가했고, 앱은 `@react-native-google-signin/google-signin` + `@react-native-kakao/{core,user}`로 LoginScreen을 재작성했다 (`src/utils/oauthProviders.ts` 헬퍼 모듈 신규). 서버/앱 빌드·테스트 전부 통과 (서버 142/142, 앱 121/121). 다음 단계는 dev client 재빌드(`npx expo run:ios`/`run:android`) 후 실기기 E2E QA. Phase B(효과음/햅틱, 딥링크, i18n)는 OAuth QA 이후 진행한다.
+`feature/diary-record-redesign`(다이어리 녹음/리디자인) + 서버 측 미머지 브랜치(닉네임 비속어 필터링, emoji 16자 완화)를 각각 app/server `main`에 머지 완료. 그 위에서 **재동의(reconsent) 플로우**를 신규 구현: `PRIVACY_VERSION`이 1.0→1.1로 오른 뒤 기존 가입 유저에게 재동의를 받을 방법이 없던 갭을 메움 — 서버 `GET /user/me`에 termsVersion/privacyVersion 노출 + `PATCH /user/me/consent` 신규, 앱은 `ReconsentScreen` + 스토어 `needsReconsent` 게이트로 처리. 시뮬레이터에서 실제 기존 계정으로 E2E 검증 완료(게이트 노출 → 동의 → DB 갱신 → 재시작 후 게이트 미재현). 추가로 사용자 UI 피드백 4건 반영(오디오 플레이어 재생 반응성, 다이어리 기록 이모지/dB 정렬, 무드 칩 한 줄 정렬, 코멘트 글자수 위치). web(`deci-duel-web`)은 개인정보처리방침/이용약관의 "시행일" 표시를 분리(`TERMS_LAST_UPDATED`/`PRIVACY_LAST_UPDATED`)해 실제 정책 변경일과 일치시킴. **3개 레포 모두 로컬 브랜치 작업만 완료된 상태 — 커밋/push/배포는 아직 안 함** (app: `feature/next-release-improvements`, server: `feature/reconsent-flow`, web: `fix/policy-last-updated`). 서버 228/228, 앱 121/121 전체 테스트 통과. Phase B(효과음/햅틱, 딥링크, i18n)는 이 작업들 배포 이후 진행한다.
 
 ## 완료된 작업
 
@@ -414,6 +414,27 @@ Codex [2026-06-07 14:14] "정정 — Google/Kakao도 네이티브 SDK 기준으�
 - **`src/utils/__tests__/oauthProviders.test.ts` 신규**: idToken/accessToken 누락, 사용자 취소(Toast 미노출 신호), Google `PLAY_SERVICES_NOT_AVAILABLE`, Kakao 카카오톡 미설치/일반 SDK 오류 등 10개 테스트 — 네이티브 SDK는 `jest.mock`으로 대체
 - 검증: `npx tsc --noEmit` 통과, `npx jest --runInBand` **121/121 통과**
 
+## 완료된 작업 (2026-06-23 — 브랜치 정리 + 재동의 플로우 + UI 피드백)
+
+### 브랜치 정리
+- `feature/diary-record-redesign`(다이어리 녹음/리디자인, 8커밋) → app `main`에 머지
+- 서버 `feature/diary-record-redesign`(닉네임 비속어 필터링 + 다이어리 emoji 16자 완화, 2커밋) → server `main`에 머지. 머지로 깨진 stale 테스트(`diary.controller.spec.ts` "emoji 2자 초과" → maxLength 16 기준으로 수정) 같이 고침
+- 새 작업 브랜치 3개 생성: app `feature/next-release-improvements`, server `feature/reconsent-flow`, web `fix/policy-last-updated` (전부 로컬, push 안 함)
+
+### 재동의(reconsent) 플로우 신규
+- **배경**: 다이어리 녹음 기능으로 `PRIVACY_VERSION` 1.0→1.1 상승. 기존 가입 유저가 새 버전에 재동의할 방법이 코드상 전혀 없었음(가입 시 1회만 저장하고 그 뒤로 아무도 읽지도 갱신하지도 않음)
+- **서버**: `MeResponse`에 `termsVersion`/`privacyVersion` 추가, 신규 `PATCH /user/me/consent`(`UpdateConsentRequest` 필수 검증) — `terms_version`/`privacy_version`/`consented_at` 갱신. `docs/api.md` 동기화
+- **앱**: `useAppStore.setMe()` 안에서 `needsReconsent`를 `me.termsVersion/privacyVersion` vs 로컬 `TERMS_VERSION/PRIVACY_VERSION` 비교로 **isLoggedIn과 동시에 원자적으로 계산** — `App.tsx`가 `isLoggedIn && needsReconsent`면 `MainNavigator` 대신 신규 `ReconsentScreen`(네비게이션 라우트 아님, 최상위 분기로 교체) 렌더링. 동의 시 `PATCH /user/me/consent` 호출 후 `clearReconsent()`
+- **레이스 수정**: `LoginScreen.handleOAuthResult`(기존 유저 로그인)가 `setAuth()`로 동기적으로 `isLoggedIn=true`를 먼저 켜고 `fetchMeWithRetry().then(setMe)`를 fire-and-forget으로 던지던 구조 → `fetchMe`를 `await`한 뒤 `setMe`만 호출(실패 시에만 `setAuth` 폴백)로 변경. 홈이 잠깐 보였다가 재동의 게이트로 바뀌는 깜빡임 제거. `App.tsx`의 `restoreAuth()`는 원래부터 `fetchMe`를 await하고 있어 이 레이스 없음
+- **시뮬레이터 E2E 검증**: `npx expo run:ios`로 dev client 빌드 후 실제 기존 Google 계정으로 로그인 → 게이트 자동 노출(별도 DB 조작 없이 실제 버전 불일치로 재현) → 동의 → DB `consentedAt` 갱신 확인 → 앱 강제종료 후 재시작 시 게이트 미재현 확인
+- 검증: 서버 `npx tsc --noEmit` + `npm test` 17 suites/228 tests, 앱 `npx tsc --noEmit` + `npm test` 9 suites/121 tests 전부 통과
+
+### 사용자 UI 피드백 4건 (시뮬레이터 확인 중 발견)
+- `AudioPlayer.tsx`: `Audio.Sound.createAsync()` 로드 완료 전에 재생 버튼을 누르면 `toggle()`이 조용히 무시되던 문제 → `pendingPlayRef`로 로드 전 탭을 기억해 로드 완료 즉시 재생
+- `QuickLogSheet.tsx`/`CalendarScreen.tsx` 다이어리 기록 결과 헤더: 무드 이모지(46px)가 dB 숫자(56px)보다 체감상 훨씬 작아 보이던 불균형 → 52px로 조정 + `entryDbRow`를 `alignItems:'flex-end'`, `entryEmojiWrap`을 `justifyContent:'flex-end'`로 바꿔 이모지·숫자 하단 정렬(처음 64px로 키웠다가 너무 커서 52px로 재조정, height도 `size*1.2`로 맞춰 이모지 하단 잘림 수정)
+- `MoodPicker.tsx`의 `MoodRow`: MOODS 7개+커스텀 '+' 칩(8개, 40px+gap8px=376px)이 일반 iPhone 콘텐츠 폭(~350px)보다 넓어 `flexWrap`으로 마지막 '+' 칩이 줄바꿈되던 문제 → `flexWrap` 제거, horizontal `ScrollView`로 교체해 항상 한 줄 보장
+- `QuickLogSheet.tsx` 코멘트 글자수(`0/200`) 표시가 `right:0`로 가장자리에 딱 붙어 있던 것을 `CalendarScreen.tsx`와 동일하게 `right: S[3]`로 안쪽 inset 적용
+
 ## 진행 중인 작업
 - **dev client 재빌드 필요**: 네이티브 설정(`app.config.ts` plugins) 변경으로 `npx expo run:ios` / `npx expo run:android` 재실행 후 실기기 OAuth E2E QA
 - Apple Sign In: 개발 빌드 환경에서 테스트 필요 (네이티브 SDK 전환과 무관하게 기존 유지)
@@ -569,3 +590,7 @@ Codex [2026-06-07 14:14] "정정 — Google/Kakao도 네이티브 SDK 기준으�
 | 2026-06-13 | 다이어리 상세 시트 코멘트 영역을 보더 박스(`commentBox`)로 변경 (waveform_v2 + hero_card 코멘트 박스 결합) | 사용자가 이전 디자인 시안 중 `diary_entry_sheet_hero_card`(그라데이션 히어로 밴드 + 박스형 코멘트)를 다시 보고, 현재 구현된 `waveform_v2`(사운드 웨이브 밴드 + 저널 스타일 코멘트)의 코멘트 영역만 hero_card의 박스 스타일로 교체하길 원함. 뷰/편집 모드 공통으로 코멘트를 `commentBox`(`backgroundColor: C.surface`, `border: 1px C.line`, `borderRadius: R.md`, `padding: S[3]`)로 감싸고, 코멘트 폰트를 `FS.lg`(1.7 line-height)에서 `FS.md`(1.6 line-height)로 축소해 박스에 맞춤. `tsc --noEmit` 통과 |
 | 2026-06-14 | [Gotcha] `eas update --branch production`을 `--environment` 없이 실행해 `.env.local`(localhost)이 OTA에 박힌 문제 → 재게시로 복구 | 1일 전 게시된 production OTA("feat: 앱스토어 업데이트 안내 기능 추가")가 API 호출 실패를 유발한다는 사용자 리포트. 원인: Expo CLI는 NODE_ENV와 무관하게 `.env.local`을 최우선 로드하는데, 로컬 개발용 `.env.local`(`EXPO_PUBLIC_API_BASE_URL=http://localhost:3000`)이 존재하는 상태에서 `--environment` 플래그 없이 `eas update`를 실행해 EAS 대시보드의 production env(`https://api.deciduel.com`) 대신 localhost가 번들에 박힘. 복구: 미커밋 작업분(다이어리 오디오 기능)을 `git stash`로 치우고 동일 커밋(`a6ef16a`)에서 `eas update --branch production --environment production`으로 재게시(update group `7f3afe6b`), 이후 stash pop으로 작업분 복원. **향후 production/preview OTA 게시 시 `--environment <profile>` 플래그 필수** |
 | 2026-06-14 | 솔로 측정 녹음을 로컬 저장 후 다이어리에서 재생 가능하도록 구현 (`AudioPlayer` + `audioMap` 패턴) | 사용자가 "음 로컬이라면 휴대폰 저장소를 이용하는거지?"로 로컬 저장 방향 확정 후, 1일 1건 다이어리 모델(`saveEntry`가 해당 날짜를 덮어씀)과의 정합성, UI 톤(처음 제안한 cyan은 "파란색이 너무 튀지 않아?" 피드백으로 `C.purple`로 교체), 코멘트 "더보기" 필요성("200자인데 그냥 다 보여줄까?" → 기존 `commentScroll`(maxHeight 200)로 충분하다고 판단해 미도입)을 순차로 논의 후 구현. **구현**: ① `useMicDb.stop()`이 `recording.getURI()`를 캡처해 `Promise<string \| null>`을 반환하도록 변경(`gameMicController.GameMicInterface.stop`도 `Promise<unknown>`으로 넓혀 타입 호환). ② 신규 `src/utils/audioStorage.ts` — `persistRecording(tempUri, date)`가 `expo-file-system/legacy`로 `documentDirectory/diary-audio/`에 `{date}-{timestamp}.{ext}`로 복사, `deleteRecording(uri)`가 idempotent 삭제. ③ 신규 `src/components/AudioPlayer.tsx` — `expo-av Audio.Sound` 기반 원형 재생 버튼(`C.purple`) + 12-bar 미니 웨이브(진행률에 따라 `C.purple`/`C.line`) + `m:ss / m:ss` 모노 타이머. ④ `diaryStore.ts`: `DiaryEntry.audioUri`(서버 동기화 대상 아님) 추가 + 별도 `audioMap: Record<date, path>`를 `deci_diary_audio_map` AsyncStorage 키로 독립 영속화하고 `loadEntries`마다 `withAudio()`로 서버/캐시 `entries`에 재병합(서버 재동기화로 entries가 갈아치워져도 로컬 오디오 보존). `saveEntry`/`deleteEntry`는 "1일 1건, 덮어쓰기" 모델을 그대로 따라 새 녹음이 기존 파일을 교체하면 이전 파일을 `deleteRecording`으로 정리(저장 실패 롤백 시 신규 파일도 정리). ⑤ `SoloMeasureScreen`은 측정 종료 시 `mic.stop()`의 URI를 `recordedUri`로 보관해 `QuickLogSheet`에 `audioUri` prop으로 전달(두 화면이 각자 `useMicDb()` 인스턴스를 가지므로 측정 화면 쪽 실제 녹음을 명시적으로 넘겨야 함), `QuickLogSheet`은 resultMode에서 `playbackUri`(prop 또는 자체 재측정분)를 `<AudioPlayer>`로 노출하고 저장 시 `persistRecording`. ⑥ `CalendarScreen` 다이어리 상세 시트에 `entry.audioUri` 있으면 `<AudioPlayer>` 렌더. `tsc --noEmit` + 전체 `jest`(9 suites/121 tests) 통과 |
+| 2026-06-23 | 재동의 게이트를 네비게이션 라우트가 아니라 `App.tsx` 최상위 분기로 구현, `needsReconsent`는 `setMe()` 내부에서 `isLoggedIn`과 동시에 계산 | 기존 유저 로그인(`LoginScreen`)은 `setAuth()`가 동기적으로 `isLoggedIn=true`를 켜고 `fetchMe`는 별도로 비동기 처리하는 구조라, 재동의 여부를 나중에 별도 state로 계산하면 홈 화면이 먼저 보였다가 게이트로 바뀌는 깜빡임이 실제로 발생(시뮬레이터로 재현 확인). `setMe()` 한 번의 `set()` 호출에서 `isLoggedIn`/`needsReconsent`를 함께 확정하고, `LoginScreen.handleOAuthResult`를 `fetchMe` 완료까지 `await`한 뒤에만 `setMe` 호출하도록 순서 변경(fetchMe 실패 시에만 `setAuth` 폴백)해 레이스를 원천 차단 |
+| 2026-06-23 | `PATCH /user/me/consent`는 서버가 클라이언트가 보낸 버전 문자열 자체를 검증하지 않음 (앱의 로컬 상수가 신뢰 기준) | 가입 시 `termsVersion`/`privacyVersion`을 무검증으로 저장하던 기존 `auth.service.ts` 정책과 일관성 유지. 서버에 "현재 최신 버전이 무엇인지"에 대한 별도 소스를 두지 않아 배포 시 앱/서버 버전 동기화 문제를 만들지 않음 — 단, 악의적 클라이언트가 임의 버전 문자열을 보내 재동의를 우회할 수 있다는 트레이드오프는 인지하고 감수(법적 강제력보다 UX 마찰 최소화 우선) |
+| 2026-06-23 | `MoodEmoji`/`entryEmojiWrap` 류 컨테이너에 fontSize와 동일한 값으로 고정 height를 주면 lineHeight(`size*1.2`)가 더 커서 내용이 잘리는 패턴 발견 → height를 항상 lineHeight 기준으로 계산 | QuickLogSheet/CalendarScreen 다이어리 결과 헤더에서 이모지를 46→64px로 키웠을 때 아래쪽이 잘리는 회귀 발생. height를 `size`가 아니라 `size*1.2`로 고치고, 이후 64px가 dB 숫자(56px) 대비 과해 보인다는 피드백으로 52px로 재조정 + `alignItems:'flex-end'`/`justifyContent:'flex-end'`로 이모지·숫자 하단 정렬까지 추가 |
+| 2026-06-23 | `MoodRow`의 `flexWrap:'wrap'` → horizontal `ScrollView`로 교체 | MOODS 7개 + 커스텀 '+' 칩(8개, 40px+gap8px=376px)이 일반 iPhone 콘텐츠 폭(~350px)보다 넓어 마지막 '+' 칩이 다음 줄로 줄바꿈되는 문제. 8개 항목을 44px 터치타겟까지 키우면서 한 줄에 다 넣는 건 일반 iPhone 폭에서 수학적으로 불가능(8*44+7*8=408px)하므로, flexWrap 대신 가로 스크롤로 화면 폭과 무관하게 항상 한 줄을 보장하는 방향 선택 |
