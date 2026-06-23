@@ -2,6 +2,8 @@ import type { ConfigContext, ExpoConfig } from 'expo/config';
 import dotenv from 'dotenv';
 dotenv.config();
 
+const withModularHeaders = require('./plugins/withModularHeaders');
+
 /**
  * 정적 app.json → 동적 app.config.ts 전환 (2026-06-07)
  *
@@ -108,7 +110,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   name: 'DeciDuel',
   slug: 'deci-duel-app',
   scheme: 'deciduelapp',
-  version: '1.0.0',
+  version: '1.1.0',
   orientation: 'portrait',
   icon: './assets/icon.png',
   userInterfaceStyle: 'dark',
@@ -209,6 +211,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         },
       },
     ],
+    withModularHeaders,
   ],
   extra: {
     eas: {
