@@ -28,6 +28,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppStore } from './src/store';
 import AuthNavigator from './src/navigation/AuthNavigator';
 import MainNavigator from './src/navigation/MainNavigator';
+import ReconsentScreen from './src/screens/auth/ReconsentScreen';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import ToastContainer from './src/components/ToastContainer';
 import OfflineBanner from './src/components/OfflineBanner';
@@ -64,6 +65,7 @@ export default function App() {
   const [hasOnboarded, setHasOnboarded] = useState(false);
   const [splashDone, setSplashDone] = useState(false);
   const isLoggedIn = useAppStore((s) => s.isLoggedIn);
+  const needsReconsent = useAppStore((s) => s.needsReconsent);
   const restoreSession = useAppStore((s) => s.restoreSession);
   const setMe = useAppStore((s) => s.setMe);
 
@@ -189,7 +191,9 @@ export default function App() {
         <View style={{ flex: 1 }}>
           <NavigationContainer>
             {isLoggedIn
-              ? <MainNavigator />
+              ? (needsReconsent
+                  ? <ReconsentScreen />
+                  : <MainNavigator />)
               : (
                 <AuthNavigator
                   key={hasOnboarded ? 'auth-login' : 'auth-onboarding'}

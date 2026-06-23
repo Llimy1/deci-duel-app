@@ -140,7 +140,7 @@ export default function QuickLogSheet({
           {resultMode ? (
             <View style={styles.entryDbRow}>
               <View style={styles.entryEmojiWrap}>
-                <MoodEmoji emoji={mood} size={46} />
+                <MoodEmoji emoji={mood} size={52} />
               </View>
               <View style={styles.entryDbNumWrap}>
                 <Text style={[styles.entryDbValue, { color: dbColor(displayDb) }]}>{displayDb}</Text>
@@ -300,14 +300,14 @@ const styles = StyleSheet.create({
   },
   entryDbRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     gap: S[3],
     paddingTop: S[1],
   },
   entryEmojiWrap: {
-    height: 56,
+    height: 52 * 1.2,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
   },
   entryDbNumWrap: {
     flexDirection: 'row',
@@ -340,8 +340,8 @@ const styles = StyleSheet.create({
   },
   commentCounter: {
     position: 'absolute',
-    right: 0,
-    bottom: 4,
+    right: S[3],
+    bottom: S[3],
     fontFamily: FONTS.mono,
     fontSize: FS.xs,
     color: C.textMute,
